@@ -19,10 +19,16 @@
         <color rgba="1 1 0 1" />
     </material>
 
+    <material name="orange">
+        <color rgba="1 0.65 0 1" />
+    </material>
+
     <!-- BASE LINK -->
     <!-- let world origin at between centre of two wheels -->
     <link name="base_link">
-
+        <xacro:inertial_box mass="0.0001" x="0.0001" y="0.0001" z="0.0001">
+            <origin xyz="0 0 0" rpy="0 0 0" />
+        </xacro:inertial_box>
     </link>
 
 
@@ -39,7 +45,7 @@
             <geometry>
                 <box size="0.19 0.26 0.10" />
             </geometry>
-            <material name="white"/>
+            <material name="orange"/>
         </visual>
         <collision>
             <origin xyz="0.095 0 0.05" />
@@ -79,6 +85,11 @@
             <origin xyz="0 0 0" rpy="0 0 0" />
         </xacro:inertial_cylinder>
     </link>
+    <transmission name="left_wheel_trans">
+        <type>transmission_interface/SimpleTransmission</type>
+        <actuator name="left_wheel_motor"/>
+        <joint name="left_wheel_joint"/>
+    </transmission>
 
     <!-- RIGHT WHEEL -->
     <joint name="right_wheel_joint" type="continuous">
@@ -107,6 +118,11 @@
             <origin xyz="0 0 0" rpy="0 0 0" />
         </xacro:inertial_cylinder>
     </link>
+    <transmission name="right_wheel_trans">
+        <type>transmission_interface/SimpleTransmission</type>
+        <actuator name="right_wheel_motor"/>
+        <joint name="right_wheel_joint"/>
+    </transmission>
 
     <!-- CASTER WHEEL -->
     <joint name="caster_wheel_joint" type="fixed">
