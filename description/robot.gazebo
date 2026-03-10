@@ -36,18 +36,6 @@
       <render_engine>ogre2</render_engine>
     </plugin>
 
-    <!-- <plugin filename="gz-sim-pose-publisher-system"
-        name="gz::sim::systems::PosePublisher">
-      <publish_link_pose>true</publish_link_pose>
-      <publish_sensor_pose>true</publish_sensor_pose>
-      <publish_collision_pose>false</publish_collision_pose>
-      <publish_visual_pose>false</publish_visual_pose>
-      <publish_nested_model_pose>false</publish_nested_model_pose>
-      <use_pose_vector_msg>true</use_pose_vector_msg>
-      <static_publisher>false</static_publisher>
-      <update_frequency>50</update_frequency>
-    </plugin> -->
-
   </gazebo>
 
   <gazebo reference="lidar_frame">
@@ -58,6 +46,7 @@
       <always_on>true</always_on>
       <visualize>true</visualize>
       <topic>scan</topic>
+      <!-- <frame_id>lidar_frame</frame_id> -->
       <lidar>
         <scan>
           <horizontal>

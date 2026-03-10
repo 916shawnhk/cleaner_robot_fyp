@@ -31,7 +31,7 @@ def generate_launch_description():
                                 'gz_sim.launch.py'))
   gazeboLaunch = IncludeLaunchDescription(gazebo_rosPackageLaunch,
                                           launch_arguments={
-                                            'gz_args': ['-r -v4 ', world],
+                                            'gz_args': ['-r -v -v4 ', world],
                                             'on_exit_shutdown': 'true'
                                           }.items())
 
@@ -72,16 +72,16 @@ def generate_launch_description():
   )
 
   # RVIZ CHANGE
-  # static_tf_lidar = Node(
-  #   package='tf2_ros',
-  #   executable='static_transform_publisher',
-  #   name='lidar_tf_publisher',
-  #   arguments=['0', '0', '0', '0', '0', '0',
-  #              'lidar_frame',
-  #              'robot/base_link/lidar'],
-  #   parameters=[{'use_sim_time': True}],
-  #   output='screen'
-  # )
+  static_tf_lidar = Node(
+    package='tf2_ros',
+    executable='static_transform_publisher',
+    name='lidar_tf_publisher',
+    arguments=['0', '0', '0', '0', '0', '0',
+               'lidar_frame',
+               'robot/base_link/lidar',],
+    parameters=[{'use_sim_time': True}],
+    output='screen'
+  )
 
   launchDescriptionObject = LaunchDescription()
 
@@ -91,6 +91,6 @@ def generate_launch_description():
   launchDescriptionObject.add_action(spawnModelNodeGazebo)
   launchDescriptionObject.add_action(nodeRobotStatePublisher)
   launchDescriptionObject.add_action(start_gazebo_ros_bridge_cmd)
-  # launchDescriptionObject.add_action(static_tf_lidar)    # RVIZ CHANGE
+  launchDescriptionObject.add_action(static_tf_lidar)    # RVIZ CHANGE
 
   return launchDescriptionObject
