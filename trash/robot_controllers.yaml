@@ -3,6 +3,8 @@ controller_manager:
     update_rate: 100
     diff_drive_controller:
       type: "diff_drive_controller/DiffDriveController"
+    joint_state_broadcaster:
+      type: "joint_state_broadcaster/JointStateBroadcaster"
 
 diff_drive_controller:
   ros__parameters:
