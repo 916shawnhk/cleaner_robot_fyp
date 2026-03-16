@@ -77,7 +77,7 @@ def generate_launch_description():
     output='screen'
   )
 
-  # RVIZ CHANGE
+  # RVIZ CHANGE: lidar
   static_tf_lidar = Node(
     package='tf2_ros',
     executable='static_transform_publisher',
@@ -103,6 +103,23 @@ def generate_launch_description():
     output='screen'
   )
 
+  # ros2_control
+  diff_drive_spawner = Node(
+    package="controller_manager",
+    executable="spawner",
+    arguments=[
+        "diff_cont",
+        '--controller-ros-args',
+        '-r /diff_cont/cmd_vel:=/cmd_vel'
+    ],
+  )
+
+  joint_broad_spawner = Node(
+    package="controller_manager",
+    executable="spawner",
+    arguments=["joint_broad"],
+  )
+
   launchDescriptionObject = LaunchDescription()
 
   launchDescriptionObject.add_action(declare_world_arg)
@@ -114,5 +131,7 @@ def generate_launch_description():
   launchDescriptionObject.add_action(start_gazebo_ros_bridge_cmd)
   launchDescriptionObject.add_action(static_tf_lidar) # RVIZ CHANGE
   launchDescriptionObject.add_action(static_tf_camera)   # CAMERA CHANGE
+  launchDescriptionObject.add_action(diff_drive_spawner)
+  launchDescriptionObject.add_action(joint_broad_spawner)
 
   return launchDescriptionObject
