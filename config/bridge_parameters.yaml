@@ -5,6 +5,7 @@
   gz_type_name: "gz.msgs.Clock"
   direction: GZ_TO_ROS
 
+# FOR GAZRBO DIFF DRIVE PLUGIN
 # Command velocity subscribed to by DiffDrive plugin
 - ros_topic_name: "cmd_vel"
   gz_topic_name: "cmd_vel"
@@ -33,6 +34,7 @@
   gz_type_name: "gz.msgs.Model"
   direction: GZ_TO_ROS
 
+# SENSORS
 - ros_topic_name: "scan"
   gz_topic_name: "scan"
   ros_type_name: "sensor_msgs/msg/LaserScan"

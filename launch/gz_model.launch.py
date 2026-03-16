@@ -1,9 +1,10 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, ExecuteProcess
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, ExecuteProcess, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.conditions import IfCondition
 from launch_ros.actions import Node
 import xacro
 
@@ -22,13 +23,36 @@ def generate_launch_description():
   )
   world = LaunchConfiguration('world')
 
+  # Toggle: 'true' = ros2_control, 'false' = Gazebo built-in DiffDrive plugin
+  declare_use_ros2_control_arg = DeclareLaunchArgument(
+      'use_ros2_control',
+      default_value='true',
+      description='Use ros2_control if true, Gazebo DiffDrive plugin if false'
+  )
+  use_ros2_control = LaunchConfiguration('use_ros2_control')
+
   # remove config cache
   clear_gz_gui_cache = ExecuteProcess(
     cmd=['bash', '-c', 'rm -f ~/.gz/sim/8/gui.config ~/.gz/sim/gui.config'],
     output='screen'
   )
 
-  robotDescription = xacro.process_file(pathModelFile).toxml()
+  # Note: xacro mappings must be resolved at launch-time.
+  # use_ros2_control LaunchConfiguration is a string ('true'/'false') at this point.
+  # We extract it by evaluating the perform() equivalent via a workaround:
+  # Since gz_model.launch.py processes xacro eagerly with the Python module,
+  # we read the launch argument default here. To support runtime toggling,
+  # use_ros2_control is passed as a xacro mapping using perform_substitutions.
+  import sys
+  use_ros2_control_val = 'true'
+  for arg in sys.argv:
+      if arg.startswith('use_ros2_control:='):
+          use_ros2_control_val = arg.split(':=')[1]
+
+  robotDescription = xacro.process_file(
+      pathModelFile,
+      mappings={'use_ros2_control': use_ros2_control_val}
+  ).toxml()
   
   gazebo_rosPackageLaunch = PythonLaunchDescriptionSource(
                               os.path.join(
@@ -103,26 +127,81 @@ def generate_launch_description():
     output='screen'
   )
 
-  # ros2_control
-  diff_drive_spawner = Node(
-    package="controller_manager",
-    executable="spawner",
-    arguments=[
-        "diff_cont",
-        '--controller-ros-args',
-        '-r /diff_cont/cmd_vel:=/cmd_vel'
-    ],
-  )
+  # ros2_control spawners — only launched when use_ros2_control:=true
+  # diff_drive_spawner = Node(
+  #   package="controller_manager",
+  #   executable="spawner",
+  #   arguments=[
+  #       "diff_cont",
+  #       '--controller-ros-args',
+  #       '-r /diff_cont/cmd_vel:=/cmd_vel'
+  #   ],
+  #   condition=IfCondition(use_ros2_control),
+  # )
 
-  joint_broad_spawner = Node(
-    package="controller_manager",
-    executable="spawner",
-    arguments=["joint_broad"],
+  # joint_broad_spawner = Node(
+  #   package="controller_manager",
+  #   executable="spawner",
+  #   arguments=["joint_broad"],
+  #   condition=IfCondition(use_ros2_control),
+  # )
+
+  # delayed_spawners = TimerAction(
+  # period=3.0,
+  # actions=[diff_drive_spawner, joint_broad_spawner],
+  # condition=IfCondition(use_ros2_control),
+  # )
+
+  # diff_drive_spawner = TimerAction (
+  #   period=3.0,
+  #   actions=[
+  #     Node(
+  #       package="controller_manager",
+  #       executable="spawner",
+  #       arguments=["joint_broad"],
+  #     )
+  #   ],
+  #   condition=IfCondition(use_ros2_control)
+  # )
+  # joint_broad_spawner = TimerAction (
+  #   period=13.0,
+  #   actions=[
+  #     Node(
+  #       package="controller_manager",
+  #       executable="spawner",
+  #       arguments=[
+  #           "diff_cont",
+  #           '--controller-ros-args',
+  #           '-r /diff_cont/cmd_vel:=/cmd_vel'
+  #       ],
+  #     )
+  #   ],
+  #   condition=IfCondition(use_ros2_control)
+  # )
+
+  combined_spawner = TimerAction(
+    period=15.0,
+    actions=[
+      Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=[
+          "joint_broad",
+          "diff_cont",
+          '--controller-ros-args',
+          '-r /diff_cont/cmd_vel:=/cmd_vel'
+        ],
+        condition=IfCondition(use_ros2_control),
+        output='screen',
+      )
+    ],
+    condition=IfCondition(use_ros2_control),
   )
 
   launchDescriptionObject = LaunchDescription()
 
   launchDescriptionObject.add_action(declare_world_arg)
+  launchDescriptionObject.add_action(declare_use_ros2_control_arg)
   launchDescriptionObject.add_action(clear_gz_gui_cache)
   launchDescriptionObject.add_action(gazeboLaunch)
 
@@ -131,7 +210,9 @@ def generate_launch_description():
   launchDescriptionObject.add_action(start_gazebo_ros_bridge_cmd)
   launchDescriptionObject.add_action(static_tf_lidar) # RVIZ CHANGE
   launchDescriptionObject.add_action(static_tf_camera)   # CAMERA CHANGE
-  launchDescriptionObject.add_action(diff_drive_spawner)
-  launchDescriptionObject.add_action(joint_broad_spawner)
+  # launchDescriptionObject.add_action(diff_drive_spawner)
+  # launchDescriptionObject.add_action(joint_broad_spawner)
+  # launchDescriptionObject.add_action(delayed_spawners)
+  launchDescriptionObject.add_action(combined_spawner)
 
   return launchDescriptionObject

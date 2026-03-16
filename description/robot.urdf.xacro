@@ -2,13 +2,18 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="robot">
 
   <xacro:include filename="robot_body.xacro" />
-  <!-- <xacro:include filename="robot_control.xacro" /> -->
   <xacro:include filename="lidar.xacro" />
   <xacro:include filename="camera.xacro" />
   
-  <!-- for gazebo -->
+  <!-- gazebo sensors & physics  -->
   <xacro:include filename="robot.gazebo" />
-  <!-- for ros2_control: comment if use gz control -->
-  <xacro:include filename="ros2_control.xacro" />
+  
+  <!-- Motor control: select one based on use_ros2_control argument -->
+  <xacro:if value="$(arg use_ros2_control)">
+    <xacro:include filename="ros2_control.xacro" />
+  </xacro:if>
+  <xacro:unless value="$(arg use_ros2_control)">
+    <xacro:include filename="gazebo_control.xacro" />
+  </xacro:unless>
 
 </robot>
