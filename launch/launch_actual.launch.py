@@ -70,16 +70,16 @@ def generate_launch_description():
         )
     )
 
-    # twist_mux_config = os.path.join(get_package_share_directory(package_name),
-    #     'config', 'twist_mux.yaml')
-    # twist_mux = Node(
-    #     package='twist_mux',
-    #     executable='twist_mux',
-    #     output='screen',
-    #     remappings={('/cmd_vel_out', '/cmd_vel')},
-    #     parameters=[
-    #         {'use_sim_time': False},
-    #         twist_mux_config])
+    twist_mux_config = os.path.join(get_package_share_directory(package_name),
+        'config', 'twist_mux.yaml')
+    twist_mux = Node(
+        package='twist_mux',
+        executable='twist_mux',
+        output='screen',
+        remappings={('/cmd_vel_out', '/cmd_vel')},
+        parameters=[
+            {'use_sim_time': False},
+            twist_mux_config])
 
 
     # Launch them all!
@@ -88,5 +88,5 @@ def generate_launch_description():
         delayed_controller_manager,
         delayed_diff_drive_spawner,
         delayed_joint_broad_spawner,
-        # twist_mux,
+        twist_mux,
     ])

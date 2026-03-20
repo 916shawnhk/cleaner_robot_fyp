@@ -129,58 +129,6 @@ def generate_launch_description():
     output='screen'
   )
 
-  # ros2_control spawners — only launched when use_ros2_control:=true
-  # diff_drive_spawner = Node(
-  #   package="controller_manager",
-  #   executable="spawner",
-  #   arguments=[
-  #       "diff_cont",
-  #       '--controller-ros-args',
-  #       '-r /diff_cont/cmd_vel:=/cmd_vel'
-  #   ],
-  #   condition=IfCondition(use_ros2_control),
-  # )
-
-  # joint_broad_spawner = Node(
-  #   package="controller_manager",
-  #   executable="spawner",
-  #   arguments=["joint_broad"],
-  #   condition=IfCondition(use_ros2_control),
-  # )
-
-  # delayed_spawners = TimerAction(
-  # period=3.0,
-  # actions=[diff_drive_spawner, joint_broad_spawner],
-  # condition=IfCondition(use_ros2_control),
-  # )
-
-  # diff_drive_spawner = TimerAction (
-  #   period=3.0,
-  #   actions=[
-  #     Node(
-  #       package="controller_manager",
-  #       executable="spawner",
-  #       arguments=["joint_broad"],
-  #     )
-  #   ],
-  #   condition=IfCondition(use_ros2_control)
-  # )
-  # joint_broad_spawner = TimerAction (
-  #   period=13.0,
-  #   actions=[
-  #     Node(
-  #       package="controller_manager",
-  #       executable="spawner",
-  #       arguments=[
-  #           "diff_cont",
-  #           '--controller-ros-args',
-  #           '-r /diff_cont/cmd_vel:=/cmd_vel'
-  #       ],
-  #     )
-  #   ],
-  #   condition=IfCondition(use_ros2_control)
-  # )
-
   combined_spawner = TimerAction(
     period=15.0,
     actions=[
@@ -200,6 +148,18 @@ def generate_launch_description():
     condition=IfCondition(use_ros2_control),
   )
 
+   # twist_mux: handle multiple control sources
+  twist_mux_config = os.path.join(get_package_share_directory(namePackage),
+                                        'config', 'twist_mux.yaml')
+  twist_mux = Node(
+      package='twist_mux',
+      executable='twist_mux',
+      output='screen',
+      remappings={('/cmd_vel_out', '/cmd_vel')},
+      parameters=[
+          {'use_sim_time': True},
+          twist_mux_config])
+
   launchDescriptionObject = LaunchDescription()
 
   launchDescriptionObject.add_action(declare_world_arg)
@@ -212,9 +172,7 @@ def generate_launch_description():
   launchDescriptionObject.add_action(start_gazebo_ros_bridge_cmd)
   launchDescriptionObject.add_action(static_tf_lidar) # RVIZ CHANGE
   launchDescriptionObject.add_action(static_tf_camera)   # CAMERA CHANGE
-  # launchDescriptionObject.add_action(diff_drive_spawner)
-  # launchDescriptionObject.add_action(joint_broad_spawner)
-  # launchDescriptionObject.add_action(delayed_spawners)
   launchDescriptionObject.add_action(combined_spawner)
+  launchDescriptionObject.add_action(twist_mux)
 
   return launchDescriptionObject
