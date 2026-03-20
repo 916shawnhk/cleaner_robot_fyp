@@ -1,9 +1,6 @@
 controller_manager:
   ros__parameters:
     update_rate: 100
-    # **simulation**
-    # use_sim_time: true
-    # **actual robot**
     use_sim_time: false 
 
     diff_cont:

@@ -40,18 +40,20 @@ def generate_launch_description():
   # Note: xacro mappings must be resolved at launch-time.
   # use_ros2_control LaunchConfiguration is a string ('true'/'false') at this point.
   # We extract it by evaluating the perform() equivalent via a workaround:
-  # Since gz_model.launch.py processes xacro eagerly with the Python module,
+  # Since launch_sim.launch.py processes xacro eagerly with the Python module,
   # we read the launch argument default here. To support runtime toggling,
   # use_ros2_control is passed as a xacro mapping using perform_substitutions.
   import sys
   use_ros2_control_val = 'true'
+  sim_mode_val = 'true'
   for arg in sys.argv:
       if arg.startswith('use_ros2_control:='):
           use_ros2_control_val = arg.split(':=')[1]
 
   robotDescription = xacro.process_file(
       pathModelFile,
-      mappings={'use_ros2_control': use_ros2_control_val}
+      mappings={'use_ros2_control': use_ros2_control_val,
+                'sim_mode': 'true'}
   ).toxml()
   
   gazebo_rosPackageLaunch = PythonLaunchDescriptionSource(

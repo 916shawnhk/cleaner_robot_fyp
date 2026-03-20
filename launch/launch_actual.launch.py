@@ -29,7 +29,7 @@ def generate_launch_description():
     )
     
 
-    controller_params_file = os.path.join(get_package_share_directory(package_name),'config','my_controllers.yaml')
+    controller_params_file = os.path.join(get_package_share_directory(package_name),'config','controllers_actual.yaml')
 
     controller_manager = Node(
         package='controller_manager',
