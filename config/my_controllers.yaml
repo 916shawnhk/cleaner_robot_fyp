@@ -1,8 +1,10 @@
 controller_manager:
   ros__parameters:
     update_rate: 100
-    # **don't use on real robot?**
-    use_sim_time: true
+    # **simulation**
+    # use_sim_time: true
+    # **actual robot**
+    use_sim_time: false 
 
     diff_cont:
       type: diff_drive_controller/DiffDriveController
@@ -19,7 +21,7 @@ diff_cont:
 
     left_wheel_names: ['left_wheel_joint']
     right_wheel_names: ['right_wheel_joint']
-    wheel_separation: 0.287
+    wheel_separation: 0.28
     wheel_radius: 0.0335
 
 # joint_broad:
