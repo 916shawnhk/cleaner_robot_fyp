@@ -5,9 +5,9 @@
   <xacro:include filename="lidar.xacro" />
   <xacro:include filename="camera.xacro" />
   
-  <!-- gazebo sensors & physics  -->
+  <!-- gazebo sensor visuals & physics  -->
   <xacro:include filename="robot.gazebo" />
-  
+
   <!-- Motor control: select one based on use_ros2_control argument -->
   <xacro:if value="$(arg use_ros2_control)">
     <xacro:include filename="ros2_control.xacro" />
