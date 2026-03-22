@@ -30,4 +30,4 @@ teleop_node:
     enable_button: 4  # Hold LB
     enable_turbo_button: 5  # Hold RB
 
-    require_enable_button: true
+    require_enable_button: true  # must hold LB/RB to move
