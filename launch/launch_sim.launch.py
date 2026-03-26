@@ -123,7 +123,7 @@ def generate_launch_description():
     name='camera_tf_publisher',
     arguments=['0', '0', '0', '0', '0', '0', 
                'robot/base_link/camera_link',
-               'camera_optical_link'
+               'camera_link_optical'
               ],
     parameters=[{'use_sim_time': True}],
     output='screen'

@@ -50,7 +50,7 @@
       <visualize>false</visualize>
       <topic>scan</topic>
       <!-- <topic>/world/empty/model/robot/link/base_link/sensor/lidar/scan</topic> -->
-      <frame_id>lidar_frame</frame_id>
+      <gz_frame_id>lidar_frame</gz_frame_id>
       <lidar>
         <scan>
           <horizontal>
@@ -85,7 +85,7 @@
         <horizontal_fov>2.2689</horizontal_fov>
         <image>
           <format>R8G8B8</format>
-          <width>640</width>
+          <width>854</width>
           <height>480</height>
         </image>
         <clip>
@@ -93,6 +93,10 @@
           <far>8.0</far>
         </clip>
       </camera>
+
+      <topic>camera/image_raw</topic>
+      <gz_frame_id>camera_link_optical</gz_frame_id>
+
     </sensor>
   </gazebo>
 </robot>

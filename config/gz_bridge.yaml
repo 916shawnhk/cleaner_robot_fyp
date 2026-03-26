@@ -5,7 +5,6 @@
   gz_type_name: "gz.msgs.Clock"
   direction: GZ_TO_ROS
 
-# FOR GAZRBO DIFF DRIVE PLUGIN
 # Command velocity subscribed to by DiffDrive plugin
 - ros_topic_name: "cmd_vel"
   gz_topic_name: "cmd_vel"
@@ -34,7 +33,7 @@
   gz_type_name: "gz.msgs.Model"
   direction: GZ_TO_ROS
 
-# SENSORS
+# Laser Scan Topics
 - ros_topic_name: "scan"
   gz_topic_name: "scan"
   ros_type_name: "sensor_msgs/msg/LaserScan"
@@ -47,22 +46,9 @@
   gz_type_name: "gz.msgs.PointCloudPacked"
   direction: GZ_TO_ROS
 
-# - ros_topic_name: "/tf_static"
-#   gz_topic_name: "/tf_static"
-#   ros_type_name: "tf2_msgs/msg/TFMessage"
-#   gz_type_name: "gz.msgs.Pose_V"
-#   direction: GZ_TO_ROS
-
-- ros_topic_name: "/camera/image_raw"
-  gz_topic_name: "/world/default/model/robot/link/base_link/sensor/camera/image" # world type (empty/default/...)
-  ros_type_name: "sensor_msgs/msg/Image"
-  gz_type_name: "gz.msgs.Image"
-  direction: GZ_TO_ROS
-  lazy: false
-
+# Camera topics (main camera data handled by dedicated image bridge)
 - ros_topic_name: "camera/camera_info"
   gz_topic_name: "camera/camera_info"
   ros_type_name: "sensor_msgs/msg/CameraInfo"
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
-  lazy: false

@@ -80,7 +80,25 @@ def generate_launch_description():
         parameters=[
             {'use_sim_time': False},
             twist_mux_config])
+    
+    # ADDED — YDLidar X3
+    lidar = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([os.path.join(
+            get_package_share_directory('ydlidar_ros2_driver'),
+            'launch', 'ydlidar_x3_view_launch.py'
+        )])
+    )
 
+    # ADDED — Camera node
+    camera = Node(
+        package='camera_ros',
+        executable='camera_node',
+        output='screen',
+        parameters=[{
+            'width': 854,
+            'height': 480,
+        }]
+    )
 
     # Launch them all!
     return LaunchDescription([
@@ -89,4 +107,6 @@ def generate_launch_description():
         delayed_diff_drive_spawner,
         delayed_joint_broad_spawner,
         twist_mux,
+        lidar,
+        camera,
     ])
