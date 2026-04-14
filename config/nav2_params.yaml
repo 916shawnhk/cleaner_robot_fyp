@@ -13,7 +13,7 @@ amcl:
     global_frame_id: "map"
     lambda_short: 0.1
     laser_likelihood_max_dist: 2.0
-    laser_max_range: 10.0
+    laser_max_range: 8.0
     laser_min_range: 0.12
     laser_model_type: "likelihood_field"
     max_beams: 60
@@ -82,7 +82,7 @@ controller_server:
     # Progress checker parameters
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.5
+      required_movement_radius: 0.1
       movement_time_allowance: 10.0
     # Goal checker parameters
     #precise_goal_checker:
@@ -100,19 +100,19 @@ controller_server:
       time_steps: 56
       model_dt: 0.05
       batch_size: 2000
-      ax_max: 3.0   #####
-      ax_min: -3.0  #####
-      ay_max: 3.0
-      ay_min: -3.0
-      az_max: 3.5   #####
+      ax_max: 8.0   #####
+      ax_min: -8.0  #####
+      ay_max: 0.0
+      ay_min: -0.0
+      az_max: 8.0   #####
       vx_std: 0.2
       vy_std: 0.2
       wz_std: 0.4
-      vx_max: 0.5   #####
-      vx_min: -0.5  #####
+      vx_max: 1.25   #####
+      vx_min: -1.25  #####
       vy_max: 0.5
-      wz_max: 1.9   #####
-      iteration_count: 1
+      wz_max: 3.2   #####
+      iteration_count: 2 #
       prune_distance: 1.7
       transform_tolerance: 0.1
       temperature: 0.3
@@ -137,7 +137,7 @@ controller_server:
         enabled: true
         cost_power: 1
         cost_weight: 5.0
-        threshold_to_consider: 1.4
+        threshold_to_consider: 0.9
       GoalAngleCritic:
         enabled: true
         cost_power: 1
@@ -146,14 +146,14 @@ controller_server:
       PreferForwardCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
+        cost_weight: 3.0 # 
         threshold_to_consider: 0.5
       CostCritic:
         enabled: true
         cost_power: 1
         cost_weight: 3.81
-        near_collision_cost: 160 #####
-        critical_cost: 210.0     #####
+        near_collision_cost: 250 #####
+        critical_cost: 250.0     #####
         consider_footprint: false
         collision_cost: 1000000.0
         near_goal_distance: 1.0
@@ -172,7 +172,7 @@ controller_server:
         cost_power: 1
         cost_weight: 6.0 #####
         offset_from_furthest: 5
-        threshold_to_consider: 1.4
+        threshold_to_consider: 0.9
       PathAngleCritic:
         enabled: true
         cost_power: 1
@@ -197,12 +197,12 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.22
+      robot_radius: 0.26
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 4.0 #####
-        inflation_radius: 0.25
+        cost_scaling_factor: 3.0 #####
+        inflation_radius: 0.10
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -219,9 +219,9 @@ local_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 9.5
+          raytrace_max_range: 7.5
           raytrace_min_range: 0.0
-          obstacle_max_range: 9.0
+          obstacle_max_range: 7.5
           obstacle_min_range: 0.0
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
@@ -235,9 +235,10 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_link
-      robot_radius: 0.22
+      robot_radius: 0.26
       resolution: 0.05
       track_unknown_space: true
+      
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
@@ -256,10 +257,11 @@ global_costmap:
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
+        map_topic: /map #
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 4.0
-        inflation_radius: 0.25
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.10
       always_send_full_costmap: True
 
 # The yaml_filename does not need to be specified since it going to be set by defaults in launch.
@@ -283,9 +285,11 @@ planner_server:
     costmap_update_timeout: 1.0
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
-      tolerance: 0.3
+      tolerance: 0.5
       use_astar: true ##### use A*
       allow_unknown: true
+      use_final_approach_orientation: false #
+
 
 smoother_server:
   ros__parameters:
@@ -320,9 +324,9 @@ behavior_server:
     robot_base_frame: base_link
     transform_tolerance: 0.1
     simulate_ahead_time: 2.0
-    max_rotational_vel: 1.0 #####
-    min_rotational_vel: 0.4
-    rotational_acc_lim: 3.2 #####
+    max_rotational_vel: 3.2 #####
+    min_rotational_vel: 0.8
+    rotational_acc_lim: 8.0 #####
 
 waypoint_follower:
   ros__parameters:
@@ -364,10 +368,10 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [0.5, 0.0, 2.0]   ##### vx_max, wz_max
-    min_velocity: [-0.5, 0.0, -2.0] ##### vx_min, -wz_max
-    max_accel: [2.5, 0.0, 3.2]      ##### ax_max, az_max
-    max_decel: [-2.5, 0.0, -3.2]    ##### ax_min, -az_max
+    max_velocity: [1.25, 0.0, 3.2]   ##### vx_max, wz_max
+    min_velocity: [-1.25, 0.0, -3.2] ##### vx_min, -wz_max
+    max_accel: [8.0, 0.0, 8.0]      ##### ax_max, az_max
+    max_decel: [-8.0, 0.0, -8.0]    ##### ax_min, -az_max
     odom_topic: "odom"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
@@ -380,7 +384,7 @@ collision_monitor:
     cmd_vel_in_topic: "cmd_vel_smoothed"
     cmd_vel_out_topic: "cmd_vel"
     state_topic: "collision_monitor_state"
-    transform_tolerance: 0.2
+    transform_tolerance: 0.1
     source_timeout: 1.0
     base_shift_correction: True
     stop_pub_timeout: 2.0
@@ -391,7 +395,7 @@ collision_monitor:
       type: "polygon"
       action_type: "approach"
       footprint_topic: "/local_costmap/published_footprint"
-      time_before_collision: 1.2
+      time_before_collision: 0.6
       simulation_time_step: 0.1
       min_points: 6
       visualize: False

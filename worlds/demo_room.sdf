@@ -346,6 +346,44 @@
       <static>true</static>
       <pose>-0.14701700210571289 -2.3403360843658447 0 0 0 0</pose>
     </include>
+
+    <!-- Green ball for ball_tracker demo -->
+    <model name='green_ball'>
+      <pose>0.6 0.6 0.05 0 0 0</pose>
+      <link name='link'>
+        <inertial>
+          <mass>0.05</mass>
+          <inertia>
+            <ixx>4e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>4e-05</iyy><iyz>0</iyz>
+            <izz>4e-05</izz>
+          </inertia>
+        </inertial>
+        <collision name='collision'>
+          <geometry>
+            <sphere><radius>0.05</radius></sphere>
+          </geometry>
+          <surface>
+            <friction><ode><mu>0.5</mu><mu2>0.5</mu2></ode></friction>
+            <bounce>
+              <restitution_coefficient>0.6</restitution_coefficient>
+              <threshold>0</threshold>
+            </bounce>
+          </surface>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <sphere><radius>0.05</radius></sphere>
+          </geometry>
+          <material>
+            <ambient>0.0 0.8 0.0 1</ambient>
+            <diffuse>0.0 0.8 0.0 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
     <light name='sun' type='directional'>
       <pose>0 0 10 0 0 0</pose>
       <cast_shadows>true</cast_shadows>

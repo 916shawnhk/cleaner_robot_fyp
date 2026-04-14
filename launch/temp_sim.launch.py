@@ -47,7 +47,7 @@ def generate_launch_description():
     spawn_entity = Node(package='ros_gz_sim', executable='create',
                         arguments=['-topic', 'robot_description',
                                    '-name', 'my_bot',
-                                   '-z', '0.1'],
+                                   '-z', '0.0335'],
                         output='screen')
 
 
@@ -96,8 +96,6 @@ def generate_launch_description():
             {'use_sim_time': True},
             twist_mux_config])
 
-
-
     # Launch them all!
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -113,4 +111,5 @@ def generate_launch_description():
         diff_drive_spawner,
         joint_broad_spawner,
         twist_mux,
+
     ])

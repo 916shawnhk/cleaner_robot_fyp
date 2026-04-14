@@ -15,9 +15,9 @@ twist_mux:
       nav2:
         topic   : cmd_vel_nav
         timeout : 0.5
-        priority: 70
+        priority: 50
       # opencv tutorial stuff
-      ball_tracker:
-        topic   : cmd_vel_tracker
-        timeout : 0.5
-        priority: 20
+      # ball_tracker:
+      #   topic   : cmd_vel_tracker
+      #   timeout : 0.5
+      #   priority: 60
