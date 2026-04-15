@@ -1,0 +1,18 @@
+/**:
+    ros__parameters:
+        image_transport: raw    # Use raw (uncompressed) images
+        family: 36h11           # AprilTag family — 36h11 is reliable and widely used
+        size: 0.08              # Default tag edge length in metres; adjust to match your printed tag
+        max_hamming: 0          # 0 = strict: no bit errors allowed
+
+        detector:
+            threads: 1          # CPU threads for detection
+            decimate: 2.0       # Decimate image by 2x for faster detection
+            blur: 0.0           # No blur
+            refine: True        # Sub-pixel corner refinement for better accuracy
+            sharpening: 0.25    # Mild sharpening to help edge detection
+            debug: False        # Set True to dump debug images when troubleshooting
+
+        # Tag list — add more IDs here if you use multiple docking stations
+        tag:
+            ids: [0]            # Tag ID 0 is the docking station marker

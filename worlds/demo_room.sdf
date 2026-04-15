@@ -384,6 +384,26 @@
       </link>
     </model>
 
+    <!-- ═══════════════════════════════════════════════════════════════════
+         AprilTag Docking Station  (tag36h11, ID 0)
+         ───────────────────────────────────────────────────────────────────
+         Uses the real mesh + PNG texture from Apriltag36_11_00000 so
+         apriltag_ros can detect it from the robot's camera in simulation.
+
+         Gazebo resolves  model://Apriltag36_11_00000  via GZ_SIM_RESOURCE_PATH
+         which is set in temp_sim.launch.py to include this package's models/.
+
+         TODO: Update <pose> once you decide where the dock lives in the room.
+               Format:  x  y  z  roll  pitch  yaw  (metres / radians)
+               Then update nav2_params.yaml  charging_dock > pose  to match.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <include>
+      <uri>file:///home/cj-ubuntu/dev_ws/src/cleaner_robot_fyp/models/Apriltag36_11_00000</uri>
+      <name>apriltag_docking_station</name>
+      <static>true</static>
+      <pose>-3.45 -2.5 0.06 1.570796327 0 1.570796327</pose>
+    </include>
+
     <light name='sun' type='directional'>
       <pose>0 0 10 0 0 0</pose>
       <cast_shadows>true</cast_shadows>

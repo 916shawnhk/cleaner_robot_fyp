@@ -1,0 +1,16 @@
+# dock_database.yaml
+# Nav2 Docking Server — list of known docking stations in the map frame.
+#
+# pose: [x, y, yaw_radians]
+#   x, y    : position of the dock in the map (metres)
+#   yaw     : orientation the robot should face when docked (radians)
+#
+# Set the pose to match the actual docking station location in your map.
+# You can find the pose by navigating near the dock and reading /odom or
+# running `ros2 topic echo /robot_pose` once localisation is running.
+
+docks:
+  charging_dock:
+    type: 'simple_charging_dock'
+    frame: map
+    pose: [-3.45, -2.5, 3.14]    # TODO: update with your dock's real map pose
