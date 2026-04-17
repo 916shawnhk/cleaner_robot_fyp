@@ -24,11 +24,11 @@ diff_cont:
     wheel_radius: 0.0335
 
     # to match nav2_params.yaml ??
-    max_velocity_x: 1.25
-    min_velocity_x: -1.25
+    max_velocity_x: 1.1
+    min_velocity_x: -1.1
     max_angular_velocity: 3.2
-    max_linear_x: 1.25
-    min_linear_x: -1.25
+    max_linear_x: 1.1
+    min_linear_x: -1.1
 
 # joint_broad:
 #   ros__parameters:

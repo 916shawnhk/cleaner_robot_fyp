@@ -108,8 +108,8 @@ controller_server:
       vx_std: 0.2
       vy_std: 0.2
       wz_std: 0.4
-      vx_max: 0.75   #####
-      vx_min: -0.75  #####
+      vx_max: 1.1   #####
+      vx_min: -1.1  #####
       vy_max: 0.5
       wz_max: 3.2   #####
       iteration_count: 1 #
@@ -197,12 +197,12 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.32
+      robot_radius: 0.20        # actual circumscribed radius ~0.18m; 0.20 adds 2 cm safety
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 4.0 #####
-        inflation_radius: 0.12
+        cost_scaling_factor: 3.5  # moderate decay — cost fades over ~20 cm
+        inflation_radius: 0.20    # soft-avoidance band for reactive driving
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -235,7 +235,7 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_link
-      robot_radius: 0.32
+      robot_radius: 0.20        # matches local costmap
       resolution: 0.05
       track_unknown_space: true
       
@@ -260,8 +260,8 @@ global_costmap:
         map_topic: /map #
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 4.0 #####
-        inflation_radius: 0.12
+        cost_scaling_factor: 2.5  # gentle decay — cost spreads over ~40 cm, planner prefers corridor centres
+        inflation_radius: 0.40    # wide soft-avoidance band for global path planning
       always_send_full_costmap: True
 
 # The yaml_filename does not need to be specified since it going to be set by defaults in launch.
@@ -368,8 +368,8 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [0.75, 0.0, 3.2]   ##### vx_max, wz_max
-    min_velocity: [-0.75, 0.0, -3.2] ##### vx_min, -wz_max
+    max_velocity: [1.1, 0.0, 3.2]   ##### vx_max, wz_max
+    min_velocity: [-1.1, 0.0, -3.2] ##### vx_min, -wz_max
     max_accel: [4.0, 0.0, 4.0]      ##### ax_max, az_max
     max_decel: [-4.0, 0.0, -4.0]    ##### ax_min, -az_max
     odom_topic: "odom"
