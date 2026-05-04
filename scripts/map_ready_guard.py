@@ -2,9 +2,9 @@
 """
 map_ready_guard.py
 ------------------
-Waits until /map is being published (i.e. slam_toolbox has produced its first
-map), then exits with code 0. Used in the launch file as an event-triggered
-gate so that nav2 only starts once the map TF frame actually exists.
+Waits until /map is being published, then exits with code 0. Used in the launch
+file as an event-triggered gate so that nav2 only starts once the map TF frame
+actually exists.
 
 Usage (in launch file):
     Node(package='cleaner_robot_fyp', executable='map_ready_guard', ...)
@@ -22,7 +22,7 @@ import sys
 class MapReadyGuard(Node):
     def __init__(self):
         super().__init__('map_ready_guard')
-        self.get_logger().info('Waiting for /map to be published by slam_toolbox...')
+        self.get_logger().info('Waiting for /map to be published...')
 
         # Must match slam_toolbox's TRANSIENT_LOCAL publisher so we receive
         # the retained (latched) map even if it was published before we connect.

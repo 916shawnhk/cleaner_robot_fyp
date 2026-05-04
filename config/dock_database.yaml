@@ -5,12 +5,12 @@
 #   x, y    : position of the dock in the map (metres)
 #   yaw     : orientation the robot should face when docked (radians)
 #
-# Set the pose to match the actual docking station location in your map.
-# You can find the pose by navigating near the dock and reading /odom or
-# running `ros2 topic echo /robot_pose` once localisation is running.
+# This project treats the map origin as the rough dock reference: start mapping
+# with the robot at the dock, save that map, then use AprilTag detection for the
+# precise final docking correction.
 
 docks:
   charging_dock:
     type: 'simple_charging_dock'
     frame: map
-    pose: [-3.45, -2.5, 3.14]    # TODO: update with your dock's real map pose
+    pose: [0.0, 0.0, 0.0]

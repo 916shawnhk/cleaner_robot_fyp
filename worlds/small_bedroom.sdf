@@ -44,8 +44,8 @@
             </plane>
           </geometry>
           <material>
-            <ambient>0.73 0.59 0.37 1</ambient>
-            <diffuse>0.73 0.59 0.37 1</diffuse>
+            <ambient>0.730000019 0.589999974 0.370000005 1</ambient>
+            <diffuse>0.730000019 0.589999974 0.370000005 1</diffuse>
           </material>
         </visual>
         <pose>0 0 0 0 0 0</pose>
@@ -72,7 +72,7 @@
         <collision name='collision'>
           <geometry>
             <box>
-              <size>0.10000000000000001 7 2</size>
+              <size>0.10000000000000001 4.2000000000000002 2</size>
             </box>
           </geometry>
           <surface>
@@ -86,7 +86,7 @@
         <visual name='visual'>
           <geometry>
             <box>
-              <size>0.10000000000000001 7 2</size>
+              <size>0.10000000000000001 4.2000000000000002 2</size>
             </box>
           </geometry>
           <material>
@@ -109,7 +109,7 @@
         </inertial>
         <enable_wind>false</enable_wind>
       </link>
-      <pose>-3.5 0 1 0 0 0</pose>
+      <pose>-2.5499999999999998 0 1 0 0 0</pose>
       <self_collide>false</self_collide>
     </model>
     <model name='wall_east'>
@@ -118,7 +118,7 @@
         <collision name='collision'>
           <geometry>
             <box>
-              <size>0.10000000000000001 7 2</size>
+              <size>0.10000000000000001 4.2000000000000002 2</size>
             </box>
           </geometry>
           <surface>
@@ -132,7 +132,7 @@
         <visual name='visual'>
           <geometry>
             <box>
-              <size>0.10000000000000001 7 2</size>
+              <size>0.10000000000000001 4.2000000000000002 2</size>
             </box>
           </geometry>
           <material>
@@ -155,7 +155,7 @@
         </inertial>
         <enable_wind>false</enable_wind>
       </link>
-      <pose>3.5 0 1 0 0 0</pose>
+      <pose>2.5499999999999998 0 1 0 0 0</pose>
       <self_collide>false</self_collide>
     </model>
     <model name='wall_south'>
@@ -164,7 +164,7 @@
         <collision name='collision'>
           <geometry>
             <box>
-              <size>0.10000000000000001 7 2</size>
+              <size>0.10000000000000001 5 2</size>
             </box>
           </geometry>
           <surface>
@@ -178,7 +178,7 @@
         <visual name='visual'>
           <geometry>
             <box>
-              <size>0.10000000000000001 7 2</size>
+              <size>0.10000000000000001 5 2</size>
             </box>
           </geometry>
           <material>
@@ -201,7 +201,7 @@
         </inertial>
         <enable_wind>false</enable_wind>
       </link>
-      <pose>0 -3.5 1 0 0 1.5708000000000013</pose>
+      <pose>0 -2.0499999999999998 1 0 0 1.5708000000000013</pose>
       <self_collide>false</self_collide>
     </model>
     <model name='wall_north'>
@@ -210,7 +210,7 @@
         <collision name='collision'>
           <geometry>
             <box>
-              <size>0.10000000000000001 7 2</size>
+              <size>0.10000000000000001 5 2</size>
             </box>
           </geometry>
           <surface>
@@ -224,7 +224,7 @@
         <visual name='visual'>
           <geometry>
             <box>
-              <size>0.10000000000000001 7 2</size>
+              <size>0.10000000000000001 5 2</size>
             </box>
           </geometry>
           <material>
@@ -247,167 +247,63 @@
         </inertial>
         <enable_wind>false</enable_wind>
       </link>
-      <pose>0 3.5 1 0 0 1.5708000000000013</pose>
+      <pose>0 2.0499999999999998 1 0 0 1.5708000000000013</pose>
       <self_collide>false</self_collide>
     </model>
-    <include>
-      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/sofa/3</uri>
-      <name>Sofa</name>
-      <static>true</static>
-      <pose>-2.9273037910461426 -0.34865599870681763 0 0 0 0</pose>
-    </include>
-    <include>
-      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/minisofa/3</uri>
-      <name>MiniSofa</name>
-      <static>true</static>
-      <pose>-0.15432550013065338 2.4539597034454346 0 0 0 1.5702800278815108</pose>
-    </include>
     <include>
       <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/foldable_table/4</uri>
       <name>foldable_table</name>
       <static>true</static>
-      <pose>-0.046510498970746994 -3.0496878623962402 0 0 0 0</pose>
-    </include>
-    <include>
-      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/bedsidetable/2</uri>
-      <name>BedsideTable</name>
-      <static>true</static>
-      <pose>-1.2388712167739868 -3.1247575283050537 0 0 0 1.5718300204578224</pose>
+      <pose>0.17069999873638153 1.6149308681488037 0 0 0 0</pose>
     </include>
     <include>
       <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/lampandstand/3</uri>
       <name>LampAndStand</name>
       <static>true</static>
-      <pose>-0.79346281290054321 2.4771580696105957 0 0 0 -1.5704900034970721</pose>
+      <pose>2.2282655239105225 -0.64909082651138306 0 0 0 -1.5704900034970721</pose>
     </include>
     <include>
       <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/trashbin/2</uri>
       <name>TrashBin</name>
       <static>true</static>
-      <pose>-3.2931599617004395 -1.480893611907959 0 0 0 0</pose>
+      <pose>-2.3010597229003906 0.99711507558822632 0 0 0 -1.5624799708749946</pose>
     </include>
     <include>
       <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/metalcabinet/2</uri>
       <name>MetalCabinet</name>
       <static>true</static>
-      <pose>2.3679447174072266 3.2134099006652832 0 0 0 0</pose>
-    </include>
-    <include>
-      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/bedsidetablecart/3</uri>
-      <name>BedsideTableCart</name>
-      <static>true</static>
-      <pose>1.2258299589157104 -3.1777501106262207 0 0 0 1.5658846124556913</pose>
-    </include>
-    <include>
-      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/coffeetable/2</uri>
-      <name>CoffeeTable</name>
-      <static>true</static>
-      <pose>0.58952599763870239 2.4359967708587646 0 0 0 0</pose>
-    </include>
-    <include>
-      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/nursetable/2</uri>
-      <name>NurseTable</name>
-      <static>true</static>
-      <pose>3.1767747402191162 -0.15455104410648346 0 0 0 -1.5657499952127141</pose>
-    </include>
-    <include>
-      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/chair/3</uri>
-      <name>Chair</name>
-      <static>true</static>
-      <pose>1.4209263324737549 -1.0634919404983521 0 0 0 -1.1481399811620923</pose>
-    </include>
-    <include>
-      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/armchair/2</uri>
-      <name>Armchair</name>
-      <static>true</static>
-      <pose>-2.1918799877166748 1.9541399478912354 0 0 0 0.77020562215119959</pose>
+      <pose>1.4967199563980103 1.7662197351455688 0 0 0 0</pose>
     </include>
     <include>
       <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/fridge/2</uri>
       <name>Fridge</name>
       <static>true</static>
-      <pose>3.1043701171875 3.1625449657440186 0 0 0 0</pose>
+      <pose>2.2004222869873047 1.7182400226593018 0 0 0 0</pose>
     </include>
-    <include>
-      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/drawer/2</uri>
-      <name>OfficeChairBlue</name>
-      <static>true</static>
-      <pose>3.1785955429077148 -1.5974166393280029 0 0 0 -1.5520799872980984</pose>
-    </include>
-    <include>
-      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/desk/2</uri>
-      <name>Desk</name>
-      <static>true</static>
-      <pose>-1.4138573408126831 -0.34515395760536194 0 0 0 -3.1384199999495968</pose>
-    </include>
-    <include>
-      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/deskchair/2</uri>
-      <name>DeskChair</name>
-      <static>true</static>
-      <pose>-0.14701700210571289 -2.3403360843658447 0 0 0 0</pose>
-    </include>
-
-    <!-- Green ball for ball_tracker demo -->
-    <model name='green_ball'>
-      <pose>0.6 0.6 0.05 0 0 0</pose>
-      <link name='link'>
-        <inertial>
-          <mass>0.05</mass>
-          <inertia>
-            <ixx>4e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>4e-05</iyy><iyz>0</iyz>
-            <izz>4e-05</izz>
-          </inertia>
-        </inertial>
-        <collision name='collision'>
-          <geometry>
-            <sphere><radius>0.05</radius></sphere>
-          </geometry>
-          <surface>
-            <friction><ode><mu>0.5</mu><mu2>0.5</mu2></ode></friction>
-            <bounce>
-              <restitution_coefficient>0.6</restitution_coefficient>
-              <threshold>0</threshold>
-            </bounce>
-          </surface>
-        </collision>
-        <visual name='visual'>
-          <geometry>
-            <sphere><radius>0.05</radius></sphere>
-          </geometry>
-          <material>
-            <ambient>0.0 0.8 0.0 1</ambient>
-            <diffuse>0.0 0.8 0.0 1</diffuse>
-            <specular>0.1 0.1 0.1 1</specular>
-          </material>
-        </visual>
-      </link>
-    </model>
-
-    <!-- ═══════════════════════════════════════════════════════════════════
-         AprilTag Docking Station  (tag36h11, ID 0)
-         ───────────────────────────────────────────────────────────────────
-         Uses the real mesh + PNG texture from Apriltag36_11_00000 so
-         apriltag_ros can detect it from the robot's camera in simulation.
-
-         Gazebo resolves  model://Apriltag36_11_00000  via GZ_SIM_RESOURCE_PATH
-         which is set in temp_sim.launch.py to include this package's models/.
-
-         Dock-origin mapping workflow:
-               Keep the dock wherever it belongs in this SDF world, then spawn
-               the robot at the dock when starting mapping. The generated ROS
-               map origin becomes the rough dock reference; nav2_params.yaml
-               keeps charging_dock.pose near [0, 0, 0].
-
-               Format:  x  y  z  roll  pitch  yaw  (metres / radians)
-         ═══════════════════════════════════════════════════════════════════ -->
     <include>
       <uri>file:///home/cj-ubuntu/dev_ws/src/cleaner_robot_fyp/models/Apriltag36_11_00000</uri>
       <name>apriltag_docking_station</name>
       <static>true</static>
-      <pose>-3.45 -2.5 0.06 1.570796327 0 1.570796327</pose>
+      <pose>-2.5 -1.5 0.06 1.570796327 0 1.570796327</pose>
     </include>
-
+    <include>
+      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/normalbed/2</uri>
+      <name>NormalBed</name>
+      <static>true</static>
+      <pose>1.4922403484511124 -1.482310360114105 -2.4393009358038258e-09 4.4453567037376105e-09 2.0126485119419739e-15 -3.1415889953748626</pose>
+    </include>
+    <include>
+      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/minisofa/3</uri>
+      <name>MiniSofa</name>
+      <static>true</static>
+      <pose>-2.1619573812842301 0.5066901634863904 -0.00091731150193338903 -5.0473656894599286e-09 -1.5152090116731279e-08 3.140352768536415</pose>
+    </include>
+    <include>
+      <uri>file:///home/cj-ubuntu/.gz/fuel/fuel.gazebosim.org/openrobotics/models/minisofa/3</uri>
+      <name>MiniSofa_1</name>
+      <static>true</static>
+      <pose>-2.1613488670190257 -0.21527596706013366 -0.00091624008084409566 -1.4968475428631842e-09 -1.1514852934497968e-08 3.1401099070946779</pose>
+    </include>
     <light name='sun' type='directional'>
       <pose>0 0 10 0 0 0</pose>
       <cast_shadows>true</cast_shadows>

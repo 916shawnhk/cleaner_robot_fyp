@@ -1,0 +1,27 @@
+room_exploration_server:
+  ros__parameters:
+    room_exploration_algorithm: 2
+    display_trajectory: false
+
+    map_correction_closing_neighborhood_size: 8
+
+    return_path: true
+    execute_path: false
+    goal_eps: 0.0
+    use_dyn_goal_eps: false
+    interrupt_navigation_publishing: false
+    revisit_areas: false
+    left_sections_min_area: 0.01
+    global_costmap_topic: "/global_costmap/costmap"
+    coverage_check_service_name: "/room_exploration/coverage_check_server/coverage_check"
+    map_frame: "map"
+    camera_frame: "base_link"
+
+    tsp_solver: 1
+    tsp_solver_timeout: 120
+
+    min_cell_area: 80.0
+    path_eps: 18.0
+    grid_obstacle_offset: 0.08
+    max_deviation_from_track: -1
+    cell_visiting_order: 2

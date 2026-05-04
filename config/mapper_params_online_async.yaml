@@ -18,9 +18,12 @@ slam_toolbox:
     # mapping/localization
     mode: mapping
 
-    # if you'd like to immediately start continuing a map at a given pose
-    # or at the dock, but they are mutually exclusive, if pose is given
-    # will use pose
+    # Dock-origin mapping workflow:
+    # place/spawn the robot at the dock before starting mapping. The generated
+    # map origin then represents the rough dock reference used by Nav2 docking.
+    #
+    # If continuing an existing serialized slam_toolbox map, map_start_pose and
+    # map_start_at_dock are mutually exclusive; if pose is given, it is used.
     # map_file_name: /home/cj-ubuntu/dev_ws/test-map-serial
     # map_start_pose: [0.0, 0.0, 0.0]
     # map_start_at_dock: true

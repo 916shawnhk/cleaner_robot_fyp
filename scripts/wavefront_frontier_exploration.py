@@ -4,9 +4,12 @@
 # Compatible with both simulation (use_sim_time=true) and real robot (use_sim_time=false)
 
 import math
+import os
 import sys
+from collections import deque
 from enum import Enum
 
+from ament_index_python.packages import get_package_share_directory
 import numpy as np
 import rclpy
 from action_msgs.msg import GoalStatus
@@ -21,7 +24,7 @@ from rclpy.qos import (QoSDurabilityPolicy, QoSHistoryPolicy,
 
 # ── Tunable constants ─────────────────────────────────────────────────────────
 OCC_THRESHOLD = 10        # occupancy value above which a cell is "occupied"
-MIN_FRONTIER_SIZE = 5     # minimum cells to consider a frontier valid
+MIN_FRONTIER_SIZE = 2     # small reachable pockets should still count as frontiers
 
 
 # ── Map helpers ───────────────────────────────────────────────────────────────
@@ -135,7 +138,7 @@ def _find_free(mx: int, my: int, costmap: OccupancyGrid2d, cache: FrontierCache)
 
 def get_frontiers(pose, costmap: OccupancyGrid2d, logger) -> list:
     """
-    Return list of (wx, wy) centroid coordinates for each discovered frontier.
+    Return list of (wx, wy, frontier_size) for each discovered frontier.
     pose: geometry_msgs/Pose (position.x, position.y used)
     """
     cache = FrontierCache()
@@ -186,7 +189,7 @@ def get_frontiers(pose, costmap: OccupancyGrid2d, logger) -> list:
                 arr = np.array(coords)
                 cx = float(np.mean(arr[:, 0]))
                 cy = float(np.mean(arr[:, 1]))
-                frontiers.append((cx, cy))
+                frontiers.append((cx, cy, len(new_frontier)))
 
         for v in _get_neighbors(p, costmap, cache):
             if not (v.classification & (PointClassification.MapOpen.value |
@@ -224,14 +227,40 @@ class WavefrontFrontierExplorer(Node):
         # ── Parameters ────────────────────────────────────────────────────────
         self.declare_parameter('exploration_rate', 1.0)
         self.declare_parameter('goal_timeout', 30.0)
+        self.declare_parameter('min_frontier_size', MIN_FRONTIER_SIZE)
+        self.declare_parameter('empty_frontier_confirmations', 3)
+        self.declare_parameter('movement_start_distance_threshold', 0.05)
+        self.declare_parameter('frontier_blacklist_radius', 0.35)
+        self.declare_parameter('frontier_blacklist_cycles', 8)
+        self.declare_parameter(
+            'behavior_tree',
+            os.path.join(
+                get_package_share_directory('cleaner_robot_fyp'),
+                'config',
+                'general_navigate_to_pose.xml',
+            ),
+        )
 
         self._exploration_rate = self.get_parameter('exploration_rate').value
         self._goal_timeout = self.get_parameter('goal_timeout').value
+        self._min_frontier_size = int(self.get_parameter('min_frontier_size').value)
+        self._empty_frontier_confirmations = max(
+            1, int(self.get_parameter('empty_frontier_confirmations').value)
+        )
+        self._movement_start_distance_threshold = float(
+            self.get_parameter('movement_start_distance_threshold').value
+        )
+        self._frontier_blacklist_radius = float(self.get_parameter('frontier_blacklist_radius').value)
+        self._frontier_blacklist_cycles = max(1, int(self.get_parameter('frontier_blacklist_cycles').value))
+        self._behavior_tree = str(self.get_parameter('behavior_tree').value)
 
         use_sim_time = self.get_parameter('use_sim_time').value
         self.get_logger().info(
             f'WavefrontFrontierExplorer started | use_sim_time={use_sim_time} | '
-            f'exploration_rate={self._exploration_rate}s | goal_timeout={self._goal_timeout}s'
+            f'exploration_rate={self._exploration_rate}s | '
+            f'goal_timeout={self._goal_timeout}s | '
+            f'min_frontier_size={self._min_frontier_size} | '
+            f'empty_frontier_confirmations={self._empty_frontier_confirmations}'
         )
 
         # ── State ─────────────────────────────────────────────────────────────
@@ -244,6 +273,10 @@ class WavefrontFrontierExplorer(Node):
         self._mapping_started = False
         self._mapping_completed = False
         self._mapping_start_ns = None
+        self._empty_frontier_cycles = 0
+        self._movement_reference_pose = None
+        self._active_goal_target = None
+        self._frontier_blacklist = deque()
 
         # ── QoS ───────────────────────────────────────────────────────────────
         map_qos = QoSProfile(
@@ -278,8 +311,11 @@ class WavefrontFrontierExplorer(Node):
         self._current_pose = msg.pose.pose
         if not self._pose_received:
             self._pose_received = True
+            self._movement_reference_pose = msg.pose.pose
             self.get_logger().info('Initial odometry received.')
-            self._start_mapping_timer_if_ready()
+            return
+
+        self._start_mapping_timer_if_ready()
 
     # ── Exploration logic ──────────────────────────────────────────────────────
 
@@ -287,9 +323,21 @@ class WavefrontFrontierExplorer(Node):
         if self._mapping_started or not self._map_received or not self._pose_received:
             return
 
+        if self._movement_reference_pose is None or self._current_pose is None:
+            return
+
+        moved_distance = math.hypot(
+            self._current_pose.position.x - self._movement_reference_pose.position.x,
+            self._current_pose.position.y - self._movement_reference_pose.position.y,
+        )
+        if moved_distance < self._movement_start_distance_threshold:
+            return
+
         self._mapping_started = True
         self._mapping_start_ns = self.get_clock().now().nanoseconds
-        self.get_logger().info('Mapping timer started.')
+        self.get_logger().info(
+            f'Mapping timer started after robot moved {moved_distance:.2f} m.'
+        )
 
     def _format_elapsed(self) -> str:
         if self._mapping_start_ns is None:
@@ -325,10 +373,23 @@ class WavefrontFrontierExplorer(Node):
         if self._exploring:
             return  # navigation goal still active
 
+        self._decay_frontier_blacklist()
+
         frontiers = get_frontiers(self._current_pose, self._costmap, self.get_logger())
+        frontiers = [frontier for frontier in frontiers if frontier[2] >= self._min_frontier_size]
+        frontiers = [frontier for frontier in frontiers if not self._is_blacklisted_frontier(frontier)]
 
         if not frontiers:
-            self._complete_mapping()
+            self._empty_frontier_cycles += 1
+            self.get_logger().info(
+                f'No valid frontiers detected '
+                f'({self._empty_frontier_cycles}/{self._empty_frontier_confirmations})'
+            )
+            if self._empty_frontier_cycles >= self._empty_frontier_confirmations:
+                self._complete_mapping()
+            return
+
+        self._empty_frontier_cycles = 0
 
         # Choose frontier: farthest from current position for maximum coverage
         best = max(
@@ -341,7 +402,8 @@ class WavefrontFrontierExplorer(Node):
 
         self.get_logger().info(
             f'Frontiers found: {len(frontiers)} | '
-            f'Sending goal to ({best[0]:.2f}, {best[1]:.2f})'
+            f'Sending goal to ({best[0]:.2f}, {best[1]:.2f}) '
+            f'with frontier size {best[2]} cells'
         )
         self._send_goal(best[0], best[1])
 
@@ -359,8 +421,10 @@ class WavefrontFrontierExplorer(Node):
 
         goal_msg = NavigateToPose.Goal()
         goal_msg.pose = goal_pose
+        goal_msg.behavior_tree = self._behavior_tree
 
         self._exploring = True
+        self._active_goal_target = (wx, wy)
         send_future = self._nav_client.send_goal_async(
             goal_msg,
             feedback_callback=self._feedback_callback,
@@ -372,6 +436,7 @@ class WavefrontFrontierExplorer(Node):
         if not handle.accepted:
             self.get_logger().warn('Goal rejected by nav2.')
             self._exploring = False
+            self._remember_attempted_frontier()
             return
         self._goal_handle = handle
         self.get_logger().info('Goal accepted.')
@@ -388,12 +453,16 @@ class WavefrontFrontierExplorer(Node):
 
         if status == GoalStatus.STATUS_SUCCEEDED:
             self.get_logger().info('Goal reached successfully.')
+            self._remember_attempted_frontier()
         elif status == GoalStatus.STATUS_ABORTED:
             self.get_logger().warn('Goal aborted by nav2 — will try next frontier.')
+            self._remember_attempted_frontier()
         elif status == GoalStatus.STATUS_CANCELED:
             self.get_logger().info('Goal cancelled.')
+            self._remember_attempted_frontier()
         else:
             self.get_logger().warn(f'Goal ended with status: {status}')
+            self._remember_attempted_frontier()
 
     def _feedback_callback(self, feedback_msg):
         # Uncomment below for verbose distance-remaining feedback:
@@ -407,6 +476,36 @@ class WavefrontFrontierExplorer(Node):
         if self._goal_handle is not None:
             self.get_logger().info('Cancelling current navigation goal.')
             self._goal_handle.cancel_goal_async()
+
+    def _remember_attempted_frontier(self):
+        if self._active_goal_target is None:
+            return
+
+        self._frontier_blacklist.append({
+            'x': self._active_goal_target[0],
+            'y': self._active_goal_target[1],
+            'cycles_left': self._frontier_blacklist_cycles,
+        })
+        self._active_goal_target = None
+
+    def _decay_frontier_blacklist(self):
+        if not self._frontier_blacklist:
+            return
+
+        kept = deque()
+        while self._frontier_blacklist:
+            entry = self._frontier_blacklist.popleft()
+            entry['cycles_left'] -= 1
+            if entry['cycles_left'] > 0:
+                kept.append(entry)
+        self._frontier_blacklist = kept
+
+    def _is_blacklisted_frontier(self, frontier) -> bool:
+        frontier_x, frontier_y, _ = frontier
+        for entry in self._frontier_blacklist:
+            if math.hypot(frontier_x - entry['x'], frontier_y - entry['y']) <= self._frontier_blacklist_radius:
+                return True
+        return False
 
 
 def main(args=None):

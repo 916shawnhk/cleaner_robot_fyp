@@ -20,6 +20,7 @@
   <depend>ros_gz_bridge</depend>
   <depend>xacro</depend>
   <depend>geometry_msgs</depend>
+  <depend>lifecycle_msgs</depend>
   <depend>rclpy</depend>
 
   <depend>nav_msgs</depend>
@@ -27,6 +28,10 @@
   <depend>nav2_map_server</depend>
   <depend>slam_toolbox</depend>
   <depend>python3-numpy</depend>
+  <depend>visualization_msgs</depend>
+  <depend>ipa_building_msgs</depend>
+  <depend>ipa_room_exploration</depend>
+  <depend>coverage_path_planner</depend>
 
   <depend>rclcpp</depend>
   <depend>tf2_ros</depend>

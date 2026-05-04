@@ -47,25 +47,18 @@ bt_navigator:
     default_server_timeout: 20
     wait_for_service_timeout: 1000
     action_server_result_timeout: 900.0
-    default_nav_to_pose_bt_xml: "$(find-pkg-share cleaner_robot_fyp)/config/general_navigate_to_pose.xml"
-    default_nav_through_poses_bt_xml: "$(find-pkg-share cleaner_robot_fyp)/config/general_navigate_through_poses.xml"
     navigators: ["navigate_to_pose", "navigate_through_poses"]
     navigate_to_pose:
       plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
     navigate_through_poses:
       plugin: "nav2_bt_navigator::NavigateThroughPosesNavigator"
-
-    # plugin_lib_names is used to add custom BT plugins to the executor (vector of strings).
-    # Built-in plugins are added automatically
-    # plugin_lib_names: []
-
     error_code_names:
       - compute_path_error_code
       - follow_path_error_code
 
 controller_server:
   ros__parameters:
-    enable_stamped_cmd_vel: true #
+    enable_stamped_cmd_vel: true
     controller_frequency: 20.0
     costmap_update_timeout: 0.30
     min_x_velocity_threshold: 0.001
@@ -73,33 +66,21 @@ controller_server:
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 0.6
     progress_checker_plugins: ["progress_checker"]
-    goal_checker_plugins: ["general_goal_checker", "coverage_goal_checker"] # "precise_goal_checker"
+    goal_checker_plugins: ["general_goal_checker"]
     controller_plugins: ["FollowPath"]
-    current_progress_checker: "progress_checker"
-    current_goal_checker: "general_goal_checker"
     use_realtime_priority: false
 
-    # Progress checker parameters
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.03
-      movement_time_allowance: 15.0
-    # Goal checker parameters
-    #precise_goal_checker:
-    #  plugin: "nav2_controller::SimpleGoalChecker"
-    #  xy_goal_tolerance: 0.25
-    #  yaw_goal_tolerance: 0.25
-    #  stateful: True
+      required_movement_radius: 0.05
+      movement_time_allowance: 8.0
+
     general_goal_checker:
-      stateful: True
-      plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.35
-      yaw_goal_tolerance: 0.35
-    coverage_goal_checker:
       stateful: False
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.20
-      yaw_goal_tolerance: 0.60
+      yaw_goal_tolerance: 3.14
+
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
       time_steps: 56
@@ -114,7 +95,7 @@ controller_server:
       vy_std: 0.2
       wz_std: 0.4
       vx_max: 0.28
-      vx_min: -0.08
+      vx_min: -0.10
       vy_max: 0.5
       wz_max: 2.4
       iteration_count: 1
@@ -186,10 +167,6 @@ controller_server:
         threshold_to_consider: 0.5
         max_angle_to_furthest: 1.0
         mode: 0
-      # TwirlingCritic:
-      #   enabled: true
-      #   twirling_cost_power: 1
-      #   twirling_cost_weight: 10.0
 
 local_costmap:
   local_costmap:
@@ -202,12 +179,12 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.20        # actual circumscribed radius ~0.18m; 0.20 adds 2 cm safety
+      robot_radius: 0.20
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 2.5
-        inflation_radius: 0.24    # at least the footprint circumscribed radius for MPPI collision checks
+        inflation_radius: 0.20
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -240,10 +217,9 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_link
-      robot_radius: 0.20        # matches local costmap
+      robot_radius: 0.20
       resolution: 0.05
       track_unknown_space: true
-      
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
@@ -262,19 +238,12 @@ global_costmap:
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
-        map_topic: /map #
+        map_topic: /map
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 2.5
         inflation_radius: 0.24
       always_send_full_costmap: True
-
-# The yaml_filename does not need to be specified since it going to be set by defaults in launch.
-# If you'd rather set it in the yaml, remove the default "map" value in the tb3_simulation_launch.py
-# file & provide full path to map below. If CLI map configuration or launch default is provided, that will be used.
-# map_server:
-#   ros_parameters:
-#     yaml_filename: ""
 
 map_saver:
   ros__parameters:
@@ -295,7 +264,6 @@ planner_server:
       allow_unknown: true
       use_final_approach_orientation: false
 
-
 smoother_server:
   ros__parameters:
     smoother_plugins: ["simple_smoother"]
@@ -307,7 +275,7 @@ smoother_server:
 
 behavior_server:
   ros__parameters:
-    enable_stamped_cmd_vel: true #
+    enable_stamped_cmd_vel: true
     local_costmap_topic: local_costmap/costmap_raw
     global_costmap_topic: global_costmap/costmap_raw
     local_footprint_topic: local_costmap/published_footprint
@@ -342,14 +310,10 @@ waypoint_follower:
     wait_at_waypoint:
       plugin: "nav2_waypoint_follower::WaitAtWaypoint"
       enabled: True
-      waypoint_pause_duration: 0 #
+      waypoint_pause_duration: 0
 
 route_server:
   ros__parameters:
-    # The graph_filepath does not need to be specified since it going to be set by defaults in launch.
-    # If you'd rather set it in the yaml, remove the default "graph" value in the launch file(s).
-    # file & provide full path to map below. If graph config or launch default is provided, it is used
-    # graph_filepath: $(find-pkg-share nav2_route)/graphs/aws_graph.geojson
     boundary_radius_to_achieve_node: 1.0
     radius_to_achieve_node: 2.0
     smooth_corners: true
@@ -369,12 +333,12 @@ route_server:
 
 velocity_smoother:
   ros__parameters:
-    enable_stamped_cmd_vel: true #
+    enable_stamped_cmd_vel: true
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
     max_velocity: [0.28, 0.0, 2.4]
-    min_velocity: [-0.08, 0.0, -2.4]
+    min_velocity: [-0.28, 0.0, -2.4]
     max_accel: [0.8, 0.0, 1.8]
     max_decel: [-0.8, 0.0, -1.8]
     odom_topic: "odom"
@@ -393,8 +357,6 @@ collision_monitor:
     source_timeout: 1.0
     base_shift_correction: True
     stop_pub_timeout: 2.0
-    # Polygons represent zone around the robot for "stop", "slowdown" and "limit" action types,
-    # and robot footprint for "approach" action type.
     polygons: ["FootprintApproach"]
     FootprintApproach:
       type: "polygon"
@@ -415,7 +377,7 @@ collision_monitor:
 
 docking_server:
   ros__parameters:
-    enable_stamped_cmd_vel: true 
+    enable_stamped_cmd_vel: true
     controller_frequency: 50.0
     initial_perception_timeout: 5.0
     wait_charge_timeout: 5.0
@@ -427,17 +389,14 @@ docking_server:
     fixed_frame: "odom"
     dock_backwards: false
     dock_prestaging_tolerance: 0.5
-
-    # Types of docks
     dock_plugins: ['simple_charging_dock']
     simple_charging_dock:
       plugin: 'opennav_docking::SimpleChargingDock'
       docking_threshold: 0.05
       staging_x_offset: -0.4
       use_external_detection_pose: true
-      use_battery_status: false # true
-      use_stall_detection: false # true
-
+      use_battery_status: false
+      use_stall_detection: false
       external_detection_timeout: 1.0
       external_detection_translation_x: -0.18
       external_detection_translation_y: 0.0
@@ -445,8 +404,6 @@ docking_server:
       external_detection_rotation_pitch: 1.57
       external_detection_rotation_yaw: 0.0
       filter_coef: 0.1
-
-    # Dock instances
     docks: ['charging_dock']
     charging_dock:
       type: 'simple_charging_dock'
@@ -455,7 +412,6 @@ docking_server:
       # robot at the dock, so the dock reference stays near the map origin.
       # AprilTag detection provides the precise final docking correction.
       pose: [0.0, 0.0, 0.0]
-
     controller:
       k_phi: 3.0
       k_delta: 2.0
@@ -474,7 +430,7 @@ loopback_simulator:
     base_frame_id: "base_footprint"
     odom_frame_id: "odom"
     map_frame_id: "map"
-    scan_frame_id: "base_scan"  # tb4_loopback_simulator.launch.py remaps to 'rplidar_link'
+    scan_frame_id: "base_scan"
     update_duration: 0.02
     scan_range_min: 0.05
     scan_range_max: 30.0

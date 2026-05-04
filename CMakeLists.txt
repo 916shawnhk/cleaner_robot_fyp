@@ -72,6 +72,41 @@ install(
   DESTINATION lib/${PROJECT_NAME}
   RENAME map_ready_guard
 )
+
+install(
+  PROGRAMS
+    scripts/nav_ready_guard.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME nav_ready_guard
+)
+
+install(
+  PROGRAMS
+    scripts/ipa_coverage_client.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ipa_coverage_client
+)
+
+install(
+  PROGRAMS
+    scripts/coverage_path_executor.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME coverage_path_executor
+)
+
+install(
+  PROGRAMS
+    scripts/coverage_manager.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME coverage_manager
+)
+
+install(
+  PROGRAMS
+    scripts/coverage_progress_tracker.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME coverage_progress_tracker
+)
 # ───────────────────────────────────────────────────────────────────────────
 
 ament_package()
