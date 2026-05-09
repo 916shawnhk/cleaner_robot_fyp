@@ -107,6 +107,27 @@ install(
   DESTINATION lib/${PROJECT_NAME}
   RENAME coverage_progress_tracker
 )
+
+install(
+  PROGRAMS
+    scripts/cmd_vel_friction_compensator.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME cmd_vel_friction_compensator
+)
+
+install(
+  PROGRAMS
+    scripts/camera_low_obstacle_detector.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME camera_low_obstacle_detector
+)
+
+install(
+  PROGRAMS
+    scripts/cmd_vel_camera_safety_filter.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME cmd_vel_camera_safety_filter
+)
 # ───────────────────────────────────────────────────────────────────────────
 
 ament_package()

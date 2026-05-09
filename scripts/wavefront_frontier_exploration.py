@@ -10,7 +10,6 @@ from collections import deque
 from enum import Enum
 
 from ament_index_python.packages import get_package_share_directory
-import numpy as np
 import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
@@ -116,8 +115,6 @@ def _is_frontier_point(point: FrontierPoint, costmap: OccupancyGrid2d,
     has_free = False
     for n in _get_neighbors(point, costmap, cache):
         cost = costmap.getCost(n.mapX, n.mapY)
-        if cost > OCC_THRESHOLD:
-            return False
         if cost == OccupancyGrid2d.CostValues.FreeSpace.value:
             has_free = True
     return has_free
@@ -138,7 +135,9 @@ def _find_free(mx: int, my: int, costmap: OccupancyGrid2d, cache: FrontierCache)
 
 def get_frontiers(pose, costmap: OccupancyGrid2d, logger) -> list:
     """
-    Return list of (wx, wy, frontier_size) for each discovered frontier.
+    Return list of (goal_wx, goal_wy, frontier_size) for each discovered frontier.
+    The goal is a reachable free-space cell adjacent to the unknown frontier,
+    not the centroid of unknown cells.
     pose: geometry_msgs/Pose (position.x, position.y used)
     """
     cache = FrontierCache()
@@ -180,16 +179,23 @@ def get_frontiers(pose, costmap: OccupancyGrid2d, logger) -> list:
                             frontier_queue.append(w)
                 q.classification |= PointClassification.FrontierClosed.value
 
-            coords = []
+            free_goal_cells = {}
             for fp in new_frontier:
                 fp.classification |= PointClassification.MapClosed.value
-                coords.append(costmap.mapToWorld(fp.mapX, fp.mapY))
+                for n in _get_neighbors(fp, costmap, cache):
+                    if costmap.getCost(n.mapX, n.mapY) == OccupancyGrid2d.CostValues.FreeSpace.value:
+                        free_goal_cells[(n.mapX, n.mapY)] = n
 
-            if len(new_frontier) >= MIN_FRONTIER_SIZE:
-                arr = np.array(coords)
-                cx = float(np.mean(arr[:, 0]))
-                cy = float(np.mean(arr[:, 1]))
-                frontiers.append((cx, cy, len(new_frontier)))
+            if len(new_frontier) >= MIN_FRONTIER_SIZE and free_goal_cells:
+                goal_cell = max(
+                    free_goal_cells.values(),
+                    key=lambda cell: math.hypot(
+                        costmap.mapToWorld(cell.mapX, cell.mapY)[0] - pose.position.x,
+                        costmap.mapToWorld(cell.mapX, cell.mapY)[1] - pose.position.y,
+                    ),
+                )
+                gx, gy = costmap.mapToWorld(goal_cell.mapX, goal_cell.mapY)
+                frontiers.append((gx, gy, len(new_frontier)))
 
         for v in _get_neighbors(p, costmap, cache):
             if not (v.classification & (PointClassification.MapOpen.value |
@@ -228,6 +234,7 @@ class WavefrontFrontierExplorer(Node):
         self.declare_parameter('exploration_rate', 1.0)
         self.declare_parameter('goal_timeout', 30.0)
         self.declare_parameter('min_frontier_size', MIN_FRONTIER_SIZE)
+        self.declare_parameter('min_frontier_goal_distance', 0.45)
         self.declare_parameter('empty_frontier_confirmations', 3)
         self.declare_parameter('movement_start_distance_threshold', 0.05)
         self.declare_parameter('frontier_blacklist_radius', 0.35)
@@ -244,6 +251,9 @@ class WavefrontFrontierExplorer(Node):
         self._exploration_rate = self.get_parameter('exploration_rate').value
         self._goal_timeout = self.get_parameter('goal_timeout').value
         self._min_frontier_size = int(self.get_parameter('min_frontier_size').value)
+        self._min_frontier_goal_distance = float(
+            self.get_parameter('min_frontier_goal_distance').value
+        )
         self._empty_frontier_confirmations = max(
             1, int(self.get_parameter('empty_frontier_confirmations').value)
         )
@@ -260,6 +270,7 @@ class WavefrontFrontierExplorer(Node):
             f'exploration_rate={self._exploration_rate}s | '
             f'goal_timeout={self._goal_timeout}s | '
             f'min_frontier_size={self._min_frontier_size} | '
+            f'min_frontier_goal_distance={self._min_frontier_goal_distance:.2f}m | '
             f'empty_frontier_confirmations={self._empty_frontier_confirmations}'
         )
 
@@ -375,14 +386,50 @@ class WavefrontFrontierExplorer(Node):
 
         self._decay_frontier_blacklist()
 
-        frontiers = get_frontiers(self._current_pose, self._costmap, self.get_logger())
-        frontiers = [frontier for frontier in frontiers if frontier[2] >= self._min_frontier_size]
-        frontiers = [frontier for frontier in frontiers if not self._is_blacklisted_frontier(frontier)]
+        detected_frontiers = get_frontiers(self._current_pose, self._costmap, self.get_logger())
+        candidate_frontiers = [
+            frontier for frontier in detected_frontiers
+            if frontier[2] >= self._min_frontier_size
+            and self._frontier_distance(frontier) >= self._min_frontier_goal_distance
+        ]
+        frontiers = [
+            frontier for frontier in candidate_frontiers
+            if not self._is_blacklisted_frontier(frontier)
+        ]
 
         if not frontiers:
+            if candidate_frontiers:
+                best_candidate = max(candidate_frontiers, key=self._frontier_distance)
+                self.get_logger().info(
+                    f'Valid frontiers are temporarily filtered '
+                    f'(candidates={len(candidate_frontiers)}, '
+                    f'best_size={best_candidate[2]}, '
+                    f'best_distance={self._frontier_distance(best_candidate):.2f}m); '
+                    f'waiting for blacklist decay'
+                )
+                return
+
+            if detected_frontiers:
+                best_raw = max(detected_frontiers, key=self._frontier_distance)
+                self._empty_frontier_cycles += 1
+                self.get_logger().info(
+                    f'Only residual frontiers remain '
+                    f'(raw={len(detected_frontiers)}, '
+                    f'best_size={best_raw[2]}, '
+                    f'best_distance={self._frontier_distance(best_raw):.2f}m, '
+                    f'min_size={self._min_frontier_size}, '
+                    f'min_distance={self._min_frontier_goal_distance:.2f}m) '
+                    f'({self._empty_frontier_cycles}/{self._empty_frontier_confirmations})'
+                )
+                if self._empty_frontier_cycles >= self._empty_frontier_confirmations:
+                    self._complete_mapping()
+                return
+
             self._empty_frontier_cycles += 1
             self.get_logger().info(
                 f'No valid frontiers detected '
+                f'(raw=0, min_size={self._min_frontier_size}, '
+                f'min_distance={self._min_frontier_goal_distance:.2f}m) '
                 f'({self._empty_frontier_cycles}/{self._empty_frontier_confirmations})'
             )
             if self._empty_frontier_cycles >= self._empty_frontier_confirmations:
@@ -394,10 +441,7 @@ class WavefrontFrontierExplorer(Node):
         # Choose frontier: farthest from current position for maximum coverage
         best = max(
             frontiers,
-            key=lambda f: math.hypot(
-                f[0] - self._current_pose.position.x,
-                f[1] - self._current_pose.position.y,
-            ),
+            key=self._frontier_distance,
         )
 
         self.get_logger().info(
@@ -506,6 +550,12 @@ class WavefrontFrontierExplorer(Node):
             if math.hypot(frontier_x - entry['x'], frontier_y - entry['y']) <= self._frontier_blacklist_radius:
                 return True
         return False
+
+    def _frontier_distance(self, frontier) -> float:
+        return math.hypot(
+            frontier[0] - self._current_pose.position.x,
+            frontier[1] - self._current_pose.position.y,
+        )
 
 
 def main(args=None):

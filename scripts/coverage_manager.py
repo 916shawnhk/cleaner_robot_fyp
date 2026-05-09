@@ -11,7 +11,7 @@ from geometry_msgs.msg import Point, PoseStamped, Quaternion
 from ipa_building_msgs.action import RoomExploration
 from lifecycle_msgs.msg import State
 from lifecycle_msgs.srv import GetState
-from nav2_msgs.action import BackUp, DockRobot, NavigateThroughPoses, UndockRobot
+from nav2_msgs.action import BackUp, DockRobot, NavigateThroughPoses, Spin, UndockRobot
 from nav_msgs.msg import OccupancyGrid, Path
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
@@ -19,6 +19,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Image
 from std_msgs.msg import ColorRGBA
+from std_srvs.srv import Empty
 from tf2_ros import Buffer, TransformException, TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -84,6 +85,13 @@ class CoverageManager(Node):
         self.declare_parameter('dock_id', 'charging_dock')
         self.declare_parameter('dock_max_staging_time', 1000.0)
         self.declare_parameter('dock_navigate_to_staging_pose', True)
+        self.declare_parameter('pre_dock_relocalize', True)
+        self.declare_parameter('pre_dock_global_localization_service', '/reinitialize_global_localization')
+        self.declare_parameter('pre_dock_nomotion_update_service', '/request_nomotion_update')
+        self.declare_parameter('pre_dock_spin_action_name', '/spin')
+        self.declare_parameter('pre_dock_spin_yaw', 6.283185307179586)
+        self.declare_parameter('pre_dock_spin_time_allowance', 30.0)
+        self.declare_parameter('pre_dock_settle_time', 2.0)
         self.declare_parameter('undock_on_start', True)
         self.declare_parameter('undock_action_name', '/undock_robot')
         self.declare_parameter('undock_dock_type', 'simple_charging_dock')
@@ -161,6 +169,19 @@ class CoverageManager(Node):
         self._dock_navigate_to_staging_pose = bool(
             self.get_parameter('dock_navigate_to_staging_pose').value
         )
+        self._pre_dock_relocalize = bool(self.get_parameter('pre_dock_relocalize').value)
+        self._pre_dock_global_localization_service = self.get_parameter(
+            'pre_dock_global_localization_service'
+        ).value
+        self._pre_dock_nomotion_update_service = self.get_parameter(
+            'pre_dock_nomotion_update_service'
+        ).value
+        self._pre_dock_spin_action_name = self.get_parameter('pre_dock_spin_action_name').value
+        self._pre_dock_spin_yaw = float(self.get_parameter('pre_dock_spin_yaw').value)
+        self._pre_dock_spin_time_allowance = float(
+            self.get_parameter('pre_dock_spin_time_allowance').value
+        )
+        self._pre_dock_settle_time = float(self.get_parameter('pre_dock_settle_time').value)
         self._undock_on_start = bool(self.get_parameter('undock_on_start').value)
         self._undock_action_name = self.get_parameter('undock_action_name').value
         self._undock_dock_type = self.get_parameter('undock_dock_type').value
@@ -196,6 +217,7 @@ class CoverageManager(Node):
         self._exploration_client = ActionClient(self, RoomExploration, self._exploration_action_name)
         self._nav_client = ActionClient(self, NavigateThroughPoses, self._nav_action_name)
         self._dock_client = ActionClient(self, DockRobot, self._dock_action_name)
+        self._pre_dock_spin_client = ActionClient(self, Spin, self._pre_dock_spin_action_name)
         self._undock_client = ActionClient(self, UndockRobot, self._undock_action_name)
         self._manual_undock_backup_client = ActionClient(
             self,
@@ -206,6 +228,14 @@ class CoverageManager(Node):
         self._lifecycle_futures = {}
         self._lifecycle_active_nodes = set()
         self._last_lifecycle_wait_log_monotonic = {}
+        self._pre_dock_global_localization_client = self.create_client(
+            Empty,
+            self._pre_dock_global_localization_service,
+        )
+        self._pre_dock_nomotion_update_client = self.create_client(
+            Empty,
+            self._pre_dock_nomotion_update_service,
+        )
 
         map_qos = QoSProfile(
             depth=1,
@@ -235,6 +265,11 @@ class CoverageManager(Node):
         self._dock_goal_handle = None
         self._dock_request_sent = False
         self._dock_complete = False
+        self._pre_dock_relocalization_started = False
+        self._pre_dock_relocalization_done = not self._pre_dock_relocalize
+        self._pre_dock_spin_goal_handle = None
+        self._pre_dock_settle_until_monotonic: Optional[float] = None
+        self._last_pre_dock_wait_log_monotonic = 0.0
         self._undock_goal_handle = None
         self._undock_request_sent = False
         self._undock_complete = not self._undock_on_start
@@ -296,7 +331,7 @@ class CoverageManager(Node):
             return
 
         if self._execution_complete and self._auto_dock_on_completion and not self._dock_complete:
-            self._try_send_dock_request()
+            self._try_prepare_or_send_dock_request()
 
     def _undock_start_gate_ready(self) -> bool:
         if self._undock_complete:
@@ -1126,7 +1161,100 @@ class CoverageManager(Node):
             )
 
         if self._auto_dock_on_completion:
+            self._try_prepare_or_send_dock_request()
+
+    def _try_prepare_or_send_dock_request(self):
+        if self._pre_dock_relocalization_done:
             self._try_send_dock_request()
+            return
+
+        self._try_start_pre_dock_relocalization()
+
+    def _try_start_pre_dock_relocalization(self):
+        if self._pre_dock_relocalization_started:
+            if (
+                self._pre_dock_settle_until_monotonic is not None
+                and time.monotonic() >= self._pre_dock_settle_until_monotonic
+            ):
+                self._pre_dock_relocalization_done = True
+                self.get_logger().info('Pre-dock relocalization settled; sending dock request')
+                self._try_send_dock_request()
+            return
+
+        now_monotonic = time.monotonic()
+        if not self._pre_dock_global_localization_client.wait_for_service(timeout_sec=0.1):
+            if now_monotonic - self._last_pre_dock_wait_log_monotonic >= 2.0:
+                self._last_pre_dock_wait_log_monotonic = now_monotonic
+                self.get_logger().info(
+                    f"Waiting for AMCL global localization service "
+                    f"'{self._pre_dock_global_localization_service}'..."
+                )
+            return
+
+        if not self._pre_dock_spin_client.wait_for_server(timeout_sec=0.1):
+            if now_monotonic - self._last_pre_dock_wait_log_monotonic >= 2.0:
+                self._last_pre_dock_wait_log_monotonic = now_monotonic
+                self.get_logger().info(
+                    f"Waiting for pre-dock spin action server '{self._pre_dock_spin_action_name}'..."
+                )
+            return
+
+        self._pre_dock_relocalization_started = True
+        self.get_logger().warn(
+            'Coverage complete; running AMCL global relocalization and one in-place spin '
+            'before docking because long coverage can leave AMCL yaw drifted'
+        )
+
+        global_future = self._pre_dock_global_localization_client.call_async(Empty.Request())
+        global_future.add_done_callback(self._pre_dock_global_localization_callback)
+
+    def _pre_dock_global_localization_callback(self, future):
+        try:
+            future.result()
+        except Exception as exc:
+            self.get_logger().warn(
+                f'AMCL global relocalization request failed ({exc}); continuing with pre-dock spin'
+            )
+
+        goal = Spin.Goal()
+        goal.target_yaw = float(self._pre_dock_spin_yaw)
+        goal.time_allowance = Duration(seconds=self._pre_dock_spin_time_allowance).to_msg()
+
+        send_future = self._pre_dock_spin_client.send_goal_async(goal)
+        send_future.add_done_callback(self._pre_dock_spin_goal_response_callback)
+
+    def _pre_dock_spin_goal_response_callback(self, future):
+        goal_handle = future.result()
+        if goal_handle is None or not goal_handle.accepted:
+            self.get_logger().warn('Pre-dock relocalization spin was rejected; docking anyway')
+            self._pre_dock_relocalization_done = True
+            self._try_send_dock_request()
+            return
+
+        self._pre_dock_spin_goal_handle = goal_handle
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(self._pre_dock_spin_result_callback)
+
+    def _pre_dock_spin_result_callback(self, future):
+        self._pre_dock_spin_goal_handle = None
+        result = future.result()
+        if result is None:
+            self.get_logger().warn('Pre-dock relocalization spin returned an empty result')
+        elif result.status != GoalStatus.STATUS_SUCCEEDED or result.result.error_code != Spin.Result.NONE:
+            self.get_logger().warn(
+                f'Pre-dock relocalization spin did not fully succeed: status={result.status}, '
+                f'error_code={result.result.error_code}, message="{result.result.error_msg}"'
+            )
+        else:
+            self.get_logger().info('Pre-dock relocalization spin complete')
+
+        if self._pre_dock_nomotion_update_client.service_is_ready():
+            self._pre_dock_nomotion_update_client.call_async(Empty.Request())
+
+        self._pre_dock_settle_until_monotonic = time.monotonic() + max(
+            0.0,
+            self._pre_dock_settle_time,
+        )
 
     def _try_send_dock_request(self):
         if self._dock_request_sent:

@@ -31,7 +31,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, GroupAction, SetEnvironmentVariable
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
@@ -57,10 +57,24 @@ def generate_launch_description():
         default_value='0',
         description='ID of the AprilTag mounted on the docking station'
     )
+    declare_parent_frame = DeclareLaunchArgument(
+        name='parent_frame',
+        default_value='camera_link_optical',
+        description='Camera frame used by apriltag_ros for the detected tag TF. '
+                    'Must match /camera/image_rect and /camera/camera_info frame_id.'
+    )
+    declare_camera_discovery_range = DeclareLaunchArgument(
+        name='camera_discovery_range',
+        default_value='LOCALHOST',
+        description='DDS discovery range for AprilTag image-processing nodes. '
+                    'Use SUBNET when you intentionally want camera/detection topics visible off-board.'
+    )
 
     use_sim_time = LaunchConfiguration('use_sim_time')
     tag_family   = LaunchConfiguration('tag_family')
     tag_id       = LaunchConfiguration('tag_id')
+    parent_frame = LaunchConfiguration('parent_frame')
+    camera_discovery_range = LaunchConfiguration('camera_discovery_range')
 
     apriltag_config = os.path.join(pkg_share, 'config', 'apriltags_36h11.yaml')
 
@@ -88,7 +102,7 @@ def generate_launch_description():
     )
 
     # ── 2. apriltag_ros detector node ─────────────────────────────────────────
-    # Publishes TF: camera_link_optical → tag36h11:0
+    # Publishes TF: <camera frame from image header> → tag36h11:0
     apriltag_node = ComposableNode(
         package='apriltag_ros',
         plugin='AprilTagNode',
@@ -126,8 +140,8 @@ def generate_launch_description():
         name='detected_dock_pose_publisher',
         parameters=[{
             'use_sim_time': use_sim_time,
-            # Must match camera.xacro camera_optical_joint child link
-            'parent_frame': 'camera_link_optical',
+            # Must match the frame_id in /camera/image_rect or /camera/camera_info
+            'parent_frame': parent_frame,
             # apriltag_ros names the frame: <family>:<id>
             'child_frame':  [tag_family, ':', tag_id],
             'publish_rate': 10.0,
@@ -140,6 +154,11 @@ def generate_launch_description():
     ld.add_action(declare_use_sim_time)
     ld.add_action(declare_tag_family)
     ld.add_action(declare_tag_id)
-    ld.add_action(apriltag_container)
-    ld.add_action(detected_dock_pose_publisher)
+    ld.add_action(declare_parent_frame)
+    ld.add_action(declare_camera_discovery_range)
+    ld.add_action(GroupAction(actions=[
+        SetEnvironmentVariable('ROS_AUTOMATIC_DISCOVERY_RANGE', camera_discovery_range),
+        apriltag_container,
+        detected_dock_pose_publisher,
+    ]))
     return ld

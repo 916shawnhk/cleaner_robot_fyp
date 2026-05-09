@@ -2,15 +2,15 @@
     ros__parameters:
         image_transport: raw    # Use raw (uncompressed) images
         family: 36h11           # AprilTag family — 36h11 is reliable and widely used
-        size: 0.08              # Default tag edge length in metres; adjust to match your printed tag
-        max_hamming: 0          # 0 = strict: no bit errors allowed
+        size: 0.06              # Default tag edge length in metres; adjust to match your printed tag
+        max_hamming: 1          # Allow one corrected bit for dim/blurred real images
 
         detector:
-            threads: 1          # CPU threads for detection
-            decimate: 2.0       # Decimate image by 2x for faster detection
+            threads: 2          # Use two threads on the real robot for more robust detection
+            decimate: 1.0       # Full-resolution detection helps small/dim/partial tag views
             blur: 0.0           # No blur
             refine: True        # Sub-pixel corner refinement for better accuracy
-            sharpening: 0.25    # Mild sharpening to help edge detection
+            sharpening: 0.5     # Extra sharpening helps low-light tag edges
             debug: False        # Set True to dump debug images when troubleshooting
 
         # Tag list — add more IDs here if you use multiple docking stations

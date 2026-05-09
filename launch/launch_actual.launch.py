@@ -127,7 +127,7 @@ from launch import LaunchDescription
 from launch.actions import (DeclareLaunchArgument, ExecuteProcess, GroupAction,
                              IncludeLaunchDescription, LogInfo,
                              RegisterEventHandler,
-                             TimerAction)
+                             SetEnvironmentVariable, TimerAction)
 from launch.conditions import IfCondition, LaunchConfigurationEquals
 from launch.event_handlers import OnProcessExit, OnProcessStart
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -171,6 +171,7 @@ def generate_launch_description():
     coverage_behavior_tree       = LaunchConfiguration('coverage_behavior_tree')
     coverage_undock_on_start     = LaunchConfiguration('coverage_undock_on_start')
     coverage_undock_dock_type    = LaunchConfiguration('coverage_undock_dock_type')
+    camera_discovery_range       = LaunchConfiguration('camera_discovery_range')
 
     # ── Always: hardware base ─────────────────────────────────────────────────
     rsp = IncludeLaunchDescription(
@@ -209,15 +210,101 @@ def generate_launch_description():
                     os.path.join(pkg_share, 'config', 'twist_mux.yaml')],
     )
 
+    cmd_vel_friction_compensator = Node(
+        package='cleaner_robot_fyp',
+        executable='cmd_vel_friction_compensator',
+        name='cmd_vel_friction_compensator',
+        output='screen',
+        parameters=[{
+            'use_sim_time': False,
+            'input_topic': 'cmd_vel_camera_safe_raw',
+            'output_topic': 'cmd_vel_nav',
+            'stamped': True,
+            'min_linear_x': 0.12,
+            'min_angular_z': 0.55,
+            'command_epsilon': 0.01,
+            'max_linear_x': 0.34,
+            'max_angular_z': 2.4,
+        }],
+    )
+
+    camera_low_obstacle_detector = Node(
+        package='cleaner_robot_fyp',
+        executable='camera_low_obstacle_detector',
+        name='camera_low_obstacle_detector',
+        output='screen',
+        parameters=[{
+            'use_sim_time': False,
+            'enabled': True,
+            'image_topic': '/camera/image_raw',
+            'debug_image_topic': '/low_obstacle/debug_image',
+            'detection_topic': '/low_obstacle/detected',
+            'confidence_topic': '/low_obstacle/confidence',
+            'processing_rate_hz': 6.0,
+            'debug_publish_rate_hz': 3.0,
+            'roi_top_ratio': 0.56,
+            'roi_bottom_ratio': 0.98,
+            'roi_left_ratio': 0.08,
+            'roi_right_ratio': 0.92,
+            'danger_left_ratio': 0.30,
+            'danger_right_ratio': 0.70,
+            'edge_density_threshold': 0.035,
+            'center_edge_density_threshold': 0.045,
+            'texture_variance_threshold': 280.0,
+            'min_contour_area': 80.0,
+            'min_contour_count': 2,
+            'use_floor_model': True,
+            'floor_model_learning': True,
+            'floor_model_warmup_frames': 20,
+            'floor_model_update_alpha': 0.02,
+            'floor_model_l_weight': 0.45,
+            'floor_model_ab_weight': 1.0,
+            'floor_model_diff_threshold': 28.0,
+            'floor_model_area_ratio_threshold': 0.045,
+            'floor_model_min_contour_area': 450.0,
+            'floor_model_min_contours': 1,
+            'floor_model_morph_kernel': 5,
+            'detect_frames': 2,
+            'clear_frames': 4,
+            'publish_debug_image': True,
+            'overlay_scale': 1.0,
+        }],
+    )
+
+    cmd_vel_camera_safety_filter = Node(
+        package='cleaner_robot_fyp',
+        executable='cmd_vel_camera_safety_filter',
+        name='cmd_vel_camera_safety_filter',
+        output='screen',
+        parameters=[{
+            'use_sim_time': False,
+            'enabled': True,
+            'input_topic': 'cmd_vel_nav_raw',
+            'output_topic': 'cmd_vel_camera_safe_raw',
+            'detection_topic': '/low_obstacle/detected',
+            'stamped': True,
+            'detection_timeout': 0.6,
+            'stop_forward_motion': True,
+            'slow_forward_scale': 0.25,
+            'allow_backward_motion': True,
+            'max_forward_when_detected': 0.0,
+            'angular_scale_when_detected': 0.7,
+        }],
+    )
+
     lidar = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([os.path.join(
             get_package_share_directory('ydlidar_ros2_driver'),
-            'launch', 'ydlidar_x3_view_launch.py')])
+            'launch', 'x3_ydlidar_launch.py')]),
+        launch_arguments={
+            'params_file': os.path.join(pkg_share, 'config', 'ydlidar_x3_actual.yaml'),
+        }.items()
     )
 
     camera = Node(
         package='camera_ros', executable='camera_node', output='screen',
-        parameters=[{'width': 854, 'height': 480}],
+        parameters=[{'width': 854, 'height': 480, 'frame_id':'camera_link_optical'}],
+        additional_env={'ROS_AUTOMATIC_DISCOVERY_RANGE': camera_discovery_range},
     )
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -252,7 +339,15 @@ def generate_launch_description():
     wfe_node = Node(
         package='cleaner_robot_fyp', executable='wavefront_frontier_exploration',
         name='wavefront_frontier_explorer', output='screen',
-        parameters=[{'use_sim_time': False, 'exploration_rate': 1.0}],
+        parameters=[{
+            'use_sim_time': False,
+            'exploration_rate': 1.0,
+            'min_frontier_size': 8,
+            'min_frontier_goal_distance': 0.60,
+            'empty_frontier_confirmations': 12,
+            'frontier_blacklist_radius': 0.30,
+            'frontier_blacklist_cycles': 4,
+        }],
     )
 
     map_saver_node = Node(
@@ -395,7 +490,10 @@ def generate_launch_description():
 
     docking_perception_coverage = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([os.path.join(pkg_share, 'launch', 'docking.launch.py')]),
-        launch_arguments={'use_sim_time': 'false'}.items(),
+        launch_arguments={
+            'use_sim_time': 'false',
+            'camera_discovery_range': camera_discovery_range,
+        }.items(),
         condition=IfCondition(coverage_auto_dock),
     )
 
@@ -436,6 +534,10 @@ def generate_launch_description():
             'autostart': coverage_autostart,
             'auto_dock_on_completion': coverage_auto_dock,
             'dock_id': coverage_dock_id,
+            'pre_dock_relocalize': coverage_auto_dock,
+            'pre_dock_spin_yaw': 6.283185307179586,
+            'pre_dock_spin_time_allowance': 30.0,
+            'pre_dock_settle_time': 2.0,
             'coverage_behavior_tree': coverage_behavior_tree,
             'undock_on_start': coverage_undock_on_start,
             'undock_dock_type': coverage_undock_dock_type,
@@ -507,7 +609,10 @@ def generate_launch_description():
                     on_exit=[
                         LogInfo(msg='[coverage] Map available — starting Nav2 and IPA coverage stack'),
                         nav2_coverage,
-                        docking_perception_coverage,
+                        GroupAction(actions=[
+                            SetEnvironmentVariable('ROS_AUTOMATIC_DISCOVERY_RANGE', camera_discovery_range),
+                            docking_perception_coverage,
+                        ]),
                         room_exploration_server,
                         coverage_manager,
                         coverage_progress_tracker,
@@ -555,11 +660,20 @@ def generate_launch_description():
             default_value='simple_charging_dock',
             description='Dock plugin type passed to /undock_robot before coverage',
         ),
+        DeclareLaunchArgument(
+            'camera_discovery_range',
+            default_value='LOCALHOST',
+            description='DDS discovery range for camera and AprilTag image-processing nodes. '
+                        'Use SUBNET when you intentionally want to view camera topics from another device.',
+        ),
         rsp,
         delayed_controller_manager,
         delayed_diff_drive_spawner,
         delayed_joint_broad_spawner,
         twist_mux,
+        camera_low_obstacle_detector,
+        cmd_vel_camera_safety_filter,
+        cmd_vel_friction_compensator,
         lidar,
         camera,
         mapping_group,
