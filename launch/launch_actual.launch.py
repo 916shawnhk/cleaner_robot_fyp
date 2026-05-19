@@ -1,119 +1,3 @@
-# import os
-
-# from ament_index_python.packages import get_package_share_directory
-
-
-# from launch import LaunchDescription
-# from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, TimerAction, RegisterEventHandler
-# from launch.event_handlers import OnProcessStart
-# from launch.launch_description_sources import PythonLaunchDescriptionSource
-# from launch.substitutions import LaunchConfiguration
-
-
-# from launch_ros.actions import Node
-
-
-
-# def generate_launch_description():
-
-
-#     # Include the robot_state_publisher launch file, provided by our own package. Force sim time to be enabled
-#     # !!! MAKE SURE YOU SET THE PACKAGE NAME CORRECTLY !!!
-
-#     package_name='cleaner_robot_fyp' #<--- CHANGE ME
-
-#     rsp = IncludeLaunchDescription(
-#                 PythonLaunchDescriptionSource([os.path.join(
-#                     get_package_share_directory(package_name),'launch','rsp.launch.py'
-#                 )]), launch_arguments={'use_sim_time': 'false', 'use_ros2_control': 'true'}.items()
-#     )
-    
-
-#     controller_params_file = os.path.join(get_package_share_directory(package_name),'config','controllers_actual.yaml')
-
-#     controller_manager = Node(
-#         package='controller_manager',
-#         executable='ros2_control_node',
-#         parameters=[controller_params_file],
-#     )
-
-#     delayed_controller_manager = TimerAction(period=3.0,actions=[controller_manager])
-
-
-#     diff_drive_spawner = Node(
-#         package="controller_manager",
-#         executable="spawner",
-#         arguments=[
-#             "diff_cont",
-#             '--controller-ros-args',
-#             '-r /diff_cont/cmd_vel:=/cmd_vel'
-#         ],
-#     )
-
-#     delayed_diff_drive_spawner = RegisterEventHandler(
-#         event_handler=OnProcessStart(
-#             target_action=controller_manager,
-#             on_start=[diff_drive_spawner],
-#         )
-#     )
-
-#     joint_broad_spawner = Node(
-#         package="controller_manager",
-#         executable="spawner",
-#         arguments=["joint_broad"],
-#     )
-
-#     delayed_joint_broad_spawner = RegisterEventHandler(
-#         event_handler=OnProcessStart(
-#             target_action=controller_manager,
-#             on_start=[joint_broad_spawner],
-#         )
-#     )
-
-#     twist_mux_config = os.path.join(get_package_share_directory(package_name),
-#         'config', 'twist_mux.yaml')
-#     twist_mux = Node(
-#         package='twist_mux',
-#         executable='twist_mux',
-#         output='screen',
-#         remappings={('/cmd_vel_out', '/cmd_vel')},
-#         parameters=[
-#             {'use_sim_time': False},
-#             twist_mux_config])
-    
-#     # ADDED — YDLidar X3
-#     lidar = IncludeLaunchDescription(
-#         PythonLaunchDescriptionSource([os.path.join(
-#             get_package_share_directory('ydlidar_ros2_driver'),
-#             'launch', 'ydlidar_x3_view_launch.py'
-#         )])
-#     )
-
-#     # ADDED — Camera node
-#     camera = Node(
-#         package='camera_ros',
-#         executable='camera_node',
-#         output='screen',
-#         parameters=[{
-#             'width': 854,
-#             'height': 480,
-#         }]
-#     )
-
-#     # Launch them all!
-#     return LaunchDescription([
-#         rsp,
-#         delayed_controller_manager,
-#         delayed_diff_drive_spawner,
-#         delayed_joint_broad_spawner,
-#         twist_mux,
-#         lidar,
-#         camera,
-#     ])
-
-
-
-
 import os
 import time
 
@@ -240,14 +124,15 @@ def generate_launch_description():
             'debug_image_topic': '/low_obstacle/debug_image',
             'detection_topic': '/low_obstacle/detected',
             'confidence_topic': '/low_obstacle/confidence',
+            'obstacle_scan_topic': '/low_obstacle/scan',
             'processing_rate_hz': 6.0,
             'debug_publish_rate_hz': 3.0,
             'roi_top_ratio': 0.56,
-            'roi_bottom_ratio': 0.98,
-            'roi_left_ratio': 0.08,
-            'roi_right_ratio': 0.92,
-            'danger_left_ratio': 0.30,
-            'danger_right_ratio': 0.70,
+            'roi_bottom_ratio': 0.99,
+            'roi_left_ratio': 0.1,
+            'roi_right_ratio': 0.9,
+            'danger_left_ratio': 0.0,
+            'danger_right_ratio': 1.0,
             'edge_density_threshold': 0.035,
             'center_edge_density_threshold': 0.045,
             'texture_variance_threshold': 280.0,
@@ -257,16 +142,34 @@ def generate_launch_description():
             'floor_model_learning': True,
             'floor_model_warmup_frames': 20,
             'floor_model_update_alpha': 0.02,
-            'floor_model_l_weight': 0.45,
+            'floor_model_l_weight': 0.20, #
             'floor_model_ab_weight': 1.0,
+            'floor_model_gradient_weight': 0.2, #
+            'floor_model_l_contrast': 1.0,
+            'floor_model_ab_contrast': 1.25,
+            'floor_model_normalize_illumination': True,
+            'floor_model_illumination_blur': 41,
+            'floor_model_use_clahe': False, #
+            'floor_model_clahe_clip_limit': 2.0,
             'floor_model_diff_threshold': 28.0,
-            'floor_model_area_ratio_threshold': 0.045,
+            'floor_model_area_ratio_threshold': 0.18,
             'floor_model_min_contour_area': 450.0,
             'floor_model_min_contours': 1,
             'floor_model_morph_kernel': 5,
             'detect_frames': 2,
             'clear_frames': 4,
             'publish_debug_image': True,
+            'publish_obstacle_scan': True,
+            'obstacle_scan_frame_id': 'base_link',
+            'obstacle_scan_angle_min': -3.14159,
+            'obstacle_scan_angle_max': 3.14159,
+            'obstacle_scan_mark_angle_min': -0.30,
+            'obstacle_scan_mark_angle_max': 0.30,
+            'obstacle_scan_angle_increment': 0.02,
+            'obstacle_scan_range_min': 0.05,
+            'obstacle_scan_range_max': 1.0,
+            'obstacle_scan_distance': 0.35,
+            'obstacle_scan_padding_angle': 0.04,
             'overlay_scale': 1.0,
         }],
     )
@@ -284,11 +187,13 @@ def generate_launch_description():
             'detection_topic': '/low_obstacle/detected',
             'stamped': True,
             'detection_timeout': 0.6,
+            'hard_stop_when_detected': False,
             'stop_forward_motion': True,
             'slow_forward_scale': 0.25,
             'allow_backward_motion': True,
             'max_forward_when_detected': 0.0,
-            'angular_scale_when_detected': 0.7,
+            'angular_scale_when_detected': 1.0,
+            'stop_publish_rate_hz': 10.0,
         }],
     )
 
@@ -541,18 +446,19 @@ def generate_launch_description():
             'coverage_behavior_tree': coverage_behavior_tree,
             'undock_on_start': coverage_undock_on_start,
             'undock_dock_type': coverage_undock_dock_type,
+            'reset_low_obstacle_floor_model_after_undock': True,
             'continue_on_undock_failure': True,
             'manual_undock_backup_on_failure': True,
             'manual_undock_backup_distance': 0.40,
             'manual_undock_backup_speed': 0.08,
-            'robot_radius': 0.22,
-            'coverage_radius': 0.20,
+            'robot_radius': 0.19,
+            'coverage_radius': 0.19,
             'planning_mode': 1,
             'min_waypoint_spacing': 0.08,
             'segment_sample_distance': 0.12,
             'corner_angle_threshold': 0.25,
             'lateral_deviation_tolerance': 0.02,
-            'goal_clearance_radius': 0.24,
+            'goal_clearance_radius': 0.22,
             'goal_backoff_distance': 0.30,
             'goal_adjustment_step': 0.05,
             'execution_chunk_size': 2,
@@ -586,7 +492,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'use_sim_time': False,
-            'coverage_radius': 0.20,
+            'coverage_radius': 0.19,
             'reachable_clearance_radius': 0.20,
             'publish_topic': '/coverage/traversed_map',
             'robot_track_topic': '/coverage/robot_track',

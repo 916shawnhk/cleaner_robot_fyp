@@ -44,7 +44,7 @@ bt_navigator:
     robot_base_frame: base_link
     odom_topic: /odom
     bt_loop_duration: 10
-    default_server_timeout: 20
+    default_server_timeout: 1000
     wait_for_service_timeout: 1000
     action_server_result_timeout: 900.0
     default_nav_to_pose_bt_xml: "$(find-pkg-share cleaner_robot_fyp)/config/general_navigate_to_pose.xml"
@@ -202,12 +202,12 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.20        # actual circumscribed radius ~0.18m; 0.20 adds 2 cm safety
+      robot_radius: 0.19        # actual circumscribed radius ~0.18m; 0.20 adds 2 cm safety
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 2.5
-        inflation_radius: 0.24    # at least the footprint circumscribed radius for MPPI collision checks
+        inflation_radius: 0.17    # at least the footprint circumscribed radius for MPPI collision checks
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -217,7 +217,7 @@ local_costmap:
         z_voxels: 16
         max_obstacle_height: 2.0
         mark_threshold: 0
-        observation_sources: scan
+        observation_sources: scan camera_low_obstacle
         scan:
           topic: /scan
           max_obstacle_height: 2.0
@@ -227,6 +227,16 @@ local_costmap:
           raytrace_max_range: 7.5
           raytrace_min_range: 0.0
           obstacle_max_range: 7.5
+          obstacle_min_range: 0.0
+        camera_low_obstacle:
+          topic: /low_obstacle/scan
+          max_obstacle_height: 0.40
+          clearing: True
+          marking: True
+          data_type: "LaserScan"
+          raytrace_max_range: 1.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 0.8
           obstacle_min_range: 0.0
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
@@ -240,7 +250,7 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_link
-      robot_radius: 0.20        # matches local costmap
+      robot_radius: 0.19        # matches local costmap
       resolution: 0.05
       track_unknown_space: true
       
@@ -266,7 +276,7 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 2.5
-        inflation_radius: 0.24
+        inflation_radius: 0.17
       always_send_full_costmap: True
 
 # The yaml_filename does not need to be specified since it going to be set by defaults in launch.

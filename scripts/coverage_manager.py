@@ -19,7 +19,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Image
 from std_msgs.msg import ColorRGBA
-from std_srvs.srv import Empty
+from std_srvs.srv import Empty, Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -57,6 +57,7 @@ class CoverageManager(Node):
         self.declare_parameter('close_goal_forward_angle', 1.05)
         self.declare_parameter('stall_timeout_sec', 12.0)
         self.declare_parameter('stall_progress_epsilon', 0.15)
+        self.declare_parameter('no_progress_report_grace_sec', 3.0)
         self.declare_parameter('max_recoveries_per_chunk', 8)
         self.declare_parameter('start_near_robot_distance', 0.50)
         self.declare_parameter('always_start_from_beginning', True)
@@ -104,6 +105,8 @@ class CoverageManager(Node):
         self.declare_parameter('manual_undock_backup_speed', 0.08)
         self.declare_parameter('manual_undock_backup_time_allowance', 8.0)
         self.declare_parameter('undock_lifecycle_node', 'docking_server')
+        self.declare_parameter('reset_low_obstacle_floor_model_after_undock', True)
+        self.declare_parameter('low_obstacle_floor_model_reset_service', '/low_obstacle/reset_floor_model')
         self.declare_parameter(
             'nav_ready_lifecycle_nodes',
             ['controller_server', 'planner_server', 'bt_navigator'],
@@ -134,6 +137,9 @@ class CoverageManager(Node):
         self._close_goal_forward_angle = float(self.get_parameter('close_goal_forward_angle').value)
         self._stall_timeout_sec = float(self.get_parameter('stall_timeout_sec').value)
         self._stall_progress_epsilon = float(self.get_parameter('stall_progress_epsilon').value)
+        self._no_progress_report_grace_sec = float(
+            self.get_parameter('no_progress_report_grace_sec').value
+        )
         self._max_recoveries_per_chunk = int(self.get_parameter('max_recoveries_per_chunk').value)
         self._start_near_robot_distance = float(self.get_parameter('start_near_robot_distance').value)
         self._always_start_from_beginning = bool(self.get_parameter('always_start_from_beginning').value)
@@ -208,6 +214,12 @@ class CoverageManager(Node):
             self.get_parameter('manual_undock_backup_time_allowance').value
         )
         self._undock_lifecycle_node = self.get_parameter('undock_lifecycle_node').value
+        self._reset_low_obstacle_floor_model_after_undock = bool(
+            self.get_parameter('reset_low_obstacle_floor_model_after_undock').value
+        )
+        self._low_obstacle_floor_model_reset_service = self.get_parameter(
+            'low_obstacle_floor_model_reset_service'
+        ).value
         self._nav_ready_lifecycle_nodes = list(self.get_parameter('nav_ready_lifecycle_nodes').value)
         self._node_wall_start_monotonic = time.monotonic()
 
@@ -235,6 +247,10 @@ class CoverageManager(Node):
         self._pre_dock_nomotion_update_client = self.create_client(
             Empty,
             self._pre_dock_nomotion_update_service,
+        )
+        self._low_obstacle_floor_model_reset_client = self.create_client(
+            Trigger,
+            self._low_obstacle_floor_model_reset_service,
         )
 
         map_qos = QoSProfile(
@@ -294,6 +310,11 @@ class CoverageManager(Node):
         self._last_progress_time = None
         self._last_feedback_time = None
         self._last_feedback_recoveries = 0
+        self._behavior_server_trigger_count = 0
+        self._total_travel_distance = 0.0
+        self._last_travel_pose: Optional[PoseStamped] = None
+        self._total_no_progress_time = 0.0
+        self._last_no_progress_accounted_time = None
         self._last_exhausted_coverage_ratio = None
         self._supplemental_cycles_without_progress = 0
         self._single_goal_mode = False
@@ -401,6 +422,7 @@ class CoverageManager(Node):
         undock_result = result.result
         if result.status == GoalStatus.STATUS_SUCCEEDED and undock_result.success:
             self.get_logger().info('Undock complete; starting coverage planning')
+            self._reset_low_obstacle_floor_model_after_leaving_dock()
             self._undock_complete = True
             return
 
@@ -476,6 +498,7 @@ class CoverageManager(Node):
         backup_result = result.result
         if result.status == GoalStatus.STATUS_SUCCEEDED and backup_result.error_code == BackUp.Result.NONE:
             self.get_logger().info('Manual undock backup complete; starting coverage planning')
+            self._reset_low_obstacle_floor_model_after_leaving_dock()
         else:
             self.get_logger().warn(
                 f'Manual undock backup did not complete cleanly: status={result.status}, '
@@ -483,6 +506,21 @@ class CoverageManager(Node):
                 'starting coverage anyway'
             )
         self._undock_complete = True
+
+    def _reset_low_obstacle_floor_model_after_leaving_dock(self):
+        if not self._reset_low_obstacle_floor_model_after_undock:
+            return
+
+        if not self._low_obstacle_floor_model_reset_client.service_is_ready():
+            self.get_logger().warn(
+                f"Low-obstacle floor model reset service "
+                f"'{self._low_obstacle_floor_model_reset_service}' is not ready; "
+                'continuing coverage without resetting the camera floor model'
+            )
+            return
+
+        self.get_logger().info('Resetting low-obstacle floor model after undock')
+        self._low_obstacle_floor_model_reset_client.call_async(Trigger.Request())
 
     def _try_send_planning_request(self):
         if self._map_msg is None:
@@ -842,6 +880,7 @@ class CoverageManager(Node):
         self._last_progress_time = now
         self._last_feedback_time = now
         self._last_feedback_recoveries = 0
+        self._last_no_progress_accounted_time = now
 
         self._publish_current_goal(chunk_poses[0])
         self._publish_markers()
@@ -877,17 +916,26 @@ class CoverageManager(Node):
     def _nav_feedback_callback(self, feedback_msg):
         feedback = feedback_msg.feedback
         now = self.get_clock().now()
+        previous_feedback_time = self._last_feedback_time
         self._last_feedback_time = now
         self._update_movement_start()
+        self._update_travel_distance()
 
         if self._chunk_distance_remaining is None:
             self._chunk_distance_remaining = feedback.distance_remaining
             self._last_progress_time = now
+            self._last_no_progress_accounted_time = now
         elif self._chunk_distance_remaining - feedback.distance_remaining >= self._stall_progress_epsilon:
             self._chunk_distance_remaining = feedback.distance_remaining
             self._last_progress_time = now
+            self._last_no_progress_accounted_time = now
+        else:
+            self._update_no_progress_time(now, previous_feedback_time)
 
-        self._last_feedback_recoveries = feedback.number_of_recoveries
+        feedback_recoveries = int(feedback.number_of_recoveries)
+        if feedback_recoveries > self._last_feedback_recoveries:
+            self._behavior_server_trigger_count += feedback_recoveries - self._last_feedback_recoveries
+        self._last_feedback_recoveries = feedback_recoveries
 
         poses_remaining = max(0, int(feedback.number_of_poses_remaining))
         current_index = max(self._next_index, self._active_chunk_end - poses_remaining)
@@ -896,6 +944,39 @@ class CoverageManager(Node):
             self._active_feedback_goal_index = current_index
             self._publish_current_goal(self._filtered_path[current_index])
             self._publish_markers()
+
+    def _update_travel_distance(self) -> None:
+        current_pose = self._lookup_robot_pose()
+        if current_pose is None:
+            return
+
+        if self._last_travel_pose is not None:
+            distance = self._distance_between(self._last_travel_pose, current_pose)
+            if distance < 2.0:
+                self._total_travel_distance += distance
+        self._last_travel_pose = current_pose
+
+    def _update_no_progress_time(self, now, previous_feedback_time) -> None:
+        if self._last_progress_time is None or previous_feedback_time is None:
+            return
+
+        no_progress_for = (now - self._last_progress_time).nanoseconds / 1e9
+        if no_progress_for <= self._no_progress_report_grace_sec:
+            return
+
+        if self._last_no_progress_accounted_time is None:
+            self._last_no_progress_accounted_time = previous_feedback_time
+
+        if self._last_no_progress_accounted_time > previous_feedback_time:
+            interval_start = self._last_no_progress_accounted_time
+        else:
+            interval_start = previous_feedback_time
+        interval_seconds = (now - interval_start).nanoseconds / 1e9
+        if interval_seconds <= 0.0:
+            return
+
+        self._total_no_progress_time += interval_seconds
+        self._last_no_progress_accounted_time = now
 
     def _nav_result_callback(self, future):
         result = future.result()
@@ -1149,16 +1230,7 @@ class CoverageManager(Node):
 
         self._execution_complete = True
         self._publish_markers()
-        elapsed_wall_time = self._elapsed_wall_time_string()
-        if coverage_ratio is None:
-            self.get_logger().info(
-                f'Coverage execution complete (wall elapsed {elapsed_wall_time})'
-            )
-        else:
-            self.get_logger().info(
-                f'Coverage execution complete with estimated coverage {coverage_ratio * 100.0:.1f}% '
-                f'(wall elapsed {elapsed_wall_time})'
-            )
+        self._log_coverage_result_summary(coverage_ratio)
 
         if self._auto_dock_on_completion:
             self._try_prepare_or_send_dock_request()
@@ -1525,6 +1597,54 @@ class CoverageManager(Node):
         if reachable_cells == 0:
             return None
         return covered_cells / reachable_cells
+
+    def _coverage_area_stats(self) -> Tuple[Optional[float], Optional[float]]:
+        if self._progress_msg is None:
+            return None, None
+
+        reachable_cells = 0
+        covered_cells = 0
+        for progress_value in self._progress_msg.data:
+            if progress_value >= 0:
+                reachable_cells += 1
+                if progress_value > 0:
+                    covered_cells += 1
+
+        if reachable_cells == 0:
+            return None, None
+
+        cell_area = self._progress_msg.info.resolution * self._progress_msg.info.resolution
+        return covered_cells * cell_area, reachable_cells * cell_area
+
+    def _log_coverage_result_summary(self, coverage_ratio: Optional[float]) -> None:
+        elapsed_wall_time = self._elapsed_wall_time_string()
+        covered_area_m2, reachable_area_m2 = self._coverage_area_stats()
+
+        reset = '\033[0m'
+        bold = '\033[1m'
+        cyan = '\033[96m'
+        green = '\033[92m'
+        yellow = '\033[93m'
+        magenta = '\033[95m'
+        blue = '\033[94m'
+        red = '\033[91m'
+
+        coverage_text = 'unknown'
+        if coverage_ratio is not None:
+            coverage_text = f'{coverage_ratio * 100.0:.1f}%'
+            if covered_area_m2 is not None and reachable_area_m2 is not None:
+                coverage_text += f' ({covered_area_m2:.2f}/{reachable_area_m2:.2f} m^2)'
+
+        self.get_logger().info(
+            '\n'
+            f'{bold}{cyan}================ Coverage Result Summary ================{reset}\n'
+            f'{green}Elapsed time:{reset} {elapsed_wall_time}\n'
+            f'{yellow}Coverage area:{reset} {coverage_text}\n'
+            f'{blue}Total travel distance:{reset} {self._total_travel_distance:.2f} m\n'
+            f'{red}Total no-progress time:{reset} {self._format_duration(self._total_no_progress_time)}\n'
+            f'{magenta}Behavior server trigger count:{reset} {self._behavior_server_trigger_count}\n'
+            f'{bold}{cyan}========================================================={reset}'
+        )
 
     def _compute_supplemental_goals(self) -> List[PoseStamped]:
         if self._map_msg is None or self._progress_msg is None:

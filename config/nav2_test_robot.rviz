@@ -239,14 +239,14 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /coverage/markers
       Value: true
-    - Alpha: 0.4000000059604645
+    - Alpha: 0.30000001192092896
       Binary representation: false
       Binary threshold: 100
       Class: rviz_default_plugins/Map
-      Color Scheme: costmap
+      Color Scheme: map
       Draw Behind: false
       Enabled: true
-      Name: Map
+      Name: Traversed Coverage
       Topic:
         Depth: 5
         Durability Policy: Volatile

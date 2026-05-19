@@ -10,7 +10,7 @@ import numpy as np
 import rclpy
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Bool, Float32
 from std_srvs.srv import Trigger
 
@@ -26,6 +26,7 @@ class CameraLowObstacleDetector(Node):
         self.declare_parameter('debug_image_topic', '/low_obstacle/debug_image')
         self.declare_parameter('detection_topic', '/low_obstacle/detected')
         self.declare_parameter('confidence_topic', '/low_obstacle/confidence')
+        self.declare_parameter('obstacle_scan_topic', '/low_obstacle/scan')
         self.declare_parameter('processing_rate_hz', 6.0)
         self.declare_parameter('debug_publish_rate_hz', 3.0)
         self.declare_parameter('roi_top_ratio', 0.56)
@@ -45,8 +46,15 @@ class CameraLowObstacleDetector(Node):
         self.declare_parameter('floor_model_learning', True)
         self.declare_parameter('floor_model_warmup_frames', 20)
         self.declare_parameter('floor_model_update_alpha', 0.02)
-        self.declare_parameter('floor_model_l_weight', 0.45)
+        self.declare_parameter('floor_model_l_weight', 0.20)
         self.declare_parameter('floor_model_ab_weight', 1.0)
+        self.declare_parameter('floor_model_gradient_weight', 0.8)
+        self.declare_parameter('floor_model_l_contrast', 1.0)
+        self.declare_parameter('floor_model_ab_contrast', 1.0)
+        self.declare_parameter('floor_model_normalize_illumination', True)
+        self.declare_parameter('floor_model_illumination_blur', 41)
+        self.declare_parameter('floor_model_use_clahe', True)
+        self.declare_parameter('floor_model_clahe_clip_limit', 2.0)
         self.declare_parameter('floor_model_diff_threshold', 28.0)
         self.declare_parameter('floor_model_area_ratio_threshold', 0.045)
         self.declare_parameter('floor_model_min_contour_area', 450.0)
@@ -56,6 +64,17 @@ class CameraLowObstacleDetector(Node):
         self.declare_parameter('clear_frames', 4)
         self.declare_parameter('overlay_scale', 1.0)
         self.declare_parameter('publish_debug_image', True)
+        self.declare_parameter('publish_obstacle_scan', True)
+        self.declare_parameter('obstacle_scan_frame_id', 'base_link')
+        self.declare_parameter('obstacle_scan_angle_min', -3.14159)
+        self.declare_parameter('obstacle_scan_angle_max', 3.14159)
+        self.declare_parameter('obstacle_scan_mark_angle_min', -0.55)
+        self.declare_parameter('obstacle_scan_mark_angle_max', 0.55)
+        self.declare_parameter('obstacle_scan_angle_increment', 0.02)
+        self.declare_parameter('obstacle_scan_range_min', 0.05)
+        self.declare_parameter('obstacle_scan_range_max', 1.0)
+        self.declare_parameter('obstacle_scan_distance', 0.35)
+        self.declare_parameter('obstacle_scan_padding_angle', 0.08)
 
         self._bridge = CvBridge()
         self._last_process_monotonic = 0.0
@@ -64,6 +83,8 @@ class CameraLowObstacleDetector(Node):
         self._clear_streak = 0
         self._detected = False
         self._confidence = 0.0
+        self._last_obstacle_angle_min: Optional[float] = None
+        self._last_obstacle_angle_max: Optional[float] = None
         self._floor_model: Optional[np.ndarray] = None
         self._floor_model_shape = None
         self._floor_model_frames = 0
@@ -75,6 +96,7 @@ class CameraLowObstacleDetector(Node):
         self._detected_pub = self.create_publisher(Bool, self._detection_topic, 10)
         self._confidence_pub = self.create_publisher(Float32, self._confidence_topic, 10)
         self._debug_pub = self.create_publisher(Image, self._debug_image_topic, 2)
+        self._obstacle_scan_pub = self.create_publisher(LaserScan, self._obstacle_scan_topic, 10)
         self.create_subscription(Image, self._image_topic, self._image_callback, 5)
         self.create_service(Trigger, '/low_obstacle/reset_floor_model', self._reset_floor_model_callback)
         self.create_timer(0.2, self._publish_state)
@@ -90,6 +112,7 @@ class CameraLowObstacleDetector(Node):
         self._debug_image_topic = str(self.get_parameter('debug_image_topic').value)
         self._detection_topic = str(self.get_parameter('detection_topic').value)
         self._confidence_topic = str(self.get_parameter('confidence_topic').value)
+        self._obstacle_scan_topic = str(self.get_parameter('obstacle_scan_topic').value)
         self._processing_period = 1.0 / max(0.1, float(self.get_parameter('processing_rate_hz').value))
         self._debug_period = 1.0 / max(0.1, float(self.get_parameter('debug_publish_rate_hz').value))
         self._roi_top_ratio = self._clamp_ratio('roi_top_ratio')
@@ -119,6 +142,26 @@ class CameraLowObstacleDetector(Node):
         )
         self._floor_model_l_weight = max(0.0, float(self.get_parameter('floor_model_l_weight').value))
         self._floor_model_ab_weight = max(0.0, float(self.get_parameter('floor_model_ab_weight').value))
+        self._floor_model_gradient_weight = max(
+            0.0,
+            float(self.get_parameter('floor_model_gradient_weight').value),
+        )
+        self._floor_model_l_contrast = max(0.1, float(self.get_parameter('floor_model_l_contrast').value))
+        self._floor_model_ab_contrast = max(0.1, float(self.get_parameter('floor_model_ab_contrast').value))
+        self._floor_model_normalize_illumination = bool(
+            self.get_parameter('floor_model_normalize_illumination').value
+        )
+        self._floor_model_illumination_blur = max(
+            3,
+            int(self.get_parameter('floor_model_illumination_blur').value),
+        )
+        if self._floor_model_illumination_blur % 2 == 0:
+            self._floor_model_illumination_blur += 1
+        self._floor_model_use_clahe = bool(self.get_parameter('floor_model_use_clahe').value)
+        self._floor_model_clahe_clip_limit = max(
+            0.1,
+            float(self.get_parameter('floor_model_clahe_clip_limit').value),
+        )
         self._floor_model_diff_threshold = max(0.0, float(self.get_parameter('floor_model_diff_threshold').value))
         self._floor_model_area_ratio_threshold = max(
             0.0,
@@ -136,6 +179,33 @@ class CameraLowObstacleDetector(Node):
         self._clear_frames = max(1, int(self.get_parameter('clear_frames').value))
         self._overlay_scale = max(0.2, float(self.get_parameter('overlay_scale').value))
         self._publish_debug_image = bool(self.get_parameter('publish_debug_image').value)
+        self._publish_obstacle_scan = bool(self.get_parameter('publish_obstacle_scan').value)
+        self._obstacle_scan_frame_id = str(self.get_parameter('obstacle_scan_frame_id').value)
+        self._obstacle_scan_angle_min = float(self.get_parameter('obstacle_scan_angle_min').value)
+        self._obstacle_scan_angle_max = float(self.get_parameter('obstacle_scan_angle_max').value)
+        if self._obstacle_scan_angle_max <= self._obstacle_scan_angle_min:
+            self._obstacle_scan_angle_max = self._obstacle_scan_angle_min + 0.1
+        self._obstacle_scan_mark_angle_min = float(self.get_parameter('obstacle_scan_mark_angle_min').value)
+        self._obstacle_scan_mark_angle_max = float(self.get_parameter('obstacle_scan_mark_angle_max').value)
+        if self._obstacle_scan_mark_angle_max <= self._obstacle_scan_mark_angle_min:
+            self._obstacle_scan_mark_angle_max = self._obstacle_scan_mark_angle_min + 0.1
+        self._obstacle_scan_angle_increment = max(
+            0.005,
+            float(self.get_parameter('obstacle_scan_angle_increment').value),
+        )
+        self._obstacle_scan_range_min = max(0.0, float(self.get_parameter('obstacle_scan_range_min').value))
+        self._obstacle_scan_range_max = max(
+            self._obstacle_scan_range_min + 0.01,
+            float(self.get_parameter('obstacle_scan_range_max').value),
+        )
+        self._obstacle_scan_distance = min(
+            self._obstacle_scan_range_max,
+            max(self._obstacle_scan_range_min, float(self.get_parameter('obstacle_scan_distance').value)),
+        )
+        self._obstacle_scan_padding_angle = max(
+            0.0,
+            float(self.get_parameter('obstacle_scan_padding_angle').value),
+        )
 
     def _clamp_ratio(self, name: str) -> float:
         return min(1.0, max(0.0, float(self.get_parameter(name).value)))
@@ -184,6 +254,7 @@ class CameraLowObstacleDetector(Node):
             self._detected = False
 
         self._publish_state()
+        self._publish_obstacle_scan_msg()
 
         if self._publish_debug_image and now - self._last_debug_monotonic >= self._debug_period:
             self._last_debug_monotonic = now
@@ -267,6 +338,7 @@ class CameraLowObstacleDetector(Node):
             floor_area_ratio,
             floor_contour_count,
             floor_model_ready,
+            floor_diff_stats,
         ) = self._analyze_floor_model(floor_features, danger_x0, danger_x1, edge_detected)
 
         if self._use_floor_model:
@@ -275,33 +347,77 @@ class CameraLowObstacleDetector(Node):
 
         debug = self._draw_debug(
             frame,
-            edges,
             x0,
             y0,
             x1,
             y1,
             danger_x0,
             danger_x1,
-            significant_contours,
             detected,
             confidence,
-            edge_density,
-            center_edge_density,
-            texture_variance,
-            contour_count,
             floor_mask,
             floor_area_ratio,
             floor_contour_count,
             floor_model_ready,
+            floor_diff_stats,
         )
         return detected, confidence, debug
 
     def _floor_features(self, roi):
-        lab = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB).astype(np.float32)
-        lab[:, :, 0] *= self._floor_model_l_weight
-        lab[:, :, 1] *= self._floor_model_ab_weight
-        lab[:, :, 2] *= self._floor_model_ab_weight
-        return cv2.GaussianBlur(lab, (self._blur_kernel, self._blur_kernel), 0)
+        lab_u8 = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
+        l_u8, a_u8, b_u8 = cv2.split(lab_u8)
+
+        if self._floor_model_normalize_illumination:
+            l_float = l_u8.astype(np.float32)
+            low_frequency = cv2.GaussianBlur(
+                l_float,
+                (self._floor_model_illumination_blur, self._floor_model_illumination_blur),
+                0,
+            )
+            l_u8 = np.clip(l_float - low_frequency + 128.0, 0, 255).astype(np.uint8)
+
+        if self._floor_model_use_clahe:
+            clahe = cv2.createCLAHE(
+                clipLimit=self._floor_model_clahe_clip_limit,
+                tileGridSize=(8, 8),
+            )
+            l_u8 = clahe.apply(l_u8)
+
+        if abs(self._floor_model_l_contrast - 1.0) > 1e-3:
+            l_u8 = np.clip(
+                (l_u8.astype(np.float32) - 128.0) * self._floor_model_l_contrast + 128.0,
+                0,
+                255,
+            ).astype(np.uint8)
+
+        if abs(self._floor_model_ab_contrast - 1.0) > 1e-3:
+            a_u8 = np.clip(
+                (a_u8.astype(np.float32) - 128.0) * self._floor_model_ab_contrast + 128.0,
+                0,
+                255,
+            ).astype(np.uint8)
+            b_u8 = np.clip(
+                (b_u8.astype(np.float32) - 128.0) * self._floor_model_ab_contrast + 128.0,
+                0,
+                255,
+            ).astype(np.uint8)
+
+        l = l_u8.astype(np.float32)
+        a = a_u8.astype(np.float32)
+        b = b_u8.astype(np.float32)
+
+        grad_x = cv2.Sobel(l, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(l, cv2.CV_32F, 0, 1, ksize=3)
+        grad = cv2.magnitude(grad_x, grad_y)
+        grad = np.clip(grad, 0, 255)
+
+        features = cv2.merge((
+            l * self._floor_model_l_weight,
+            a * self._floor_model_ab_weight,
+            b * self._floor_model_ab_weight,
+            grad * self._floor_model_gradient_weight,
+        ))
+        return cv2.GaussianBlur(features, (self._blur_kernel, self._blur_kernel), 0)
 
     def _analyze_floor_model(self, features, danger_x0, danger_x1, edge_detected):
         if self._reset_floor_model_requested:
@@ -316,16 +432,17 @@ class CameraLowObstacleDetector(Node):
             self._floor_model_shape = features.shape
             self._floor_model_frames = 1
             empty_mask = np.zeros(features.shape[:2], dtype=np.uint8)
-            return False, 0.0, empty_mask, 0.0, 0, False
+            return False, 0.0, empty_mask, 0.0, 0, False, self._empty_floor_diff_stats()
 
         if self._floor_model_frames < self._floor_model_warmup_frames:
             alpha = 1.0 / float(self._floor_model_frames + 1)
             cv2.accumulateWeighted(features, self._floor_model, alpha)
             self._floor_model_frames += 1
             empty_mask = np.zeros(features.shape[:2], dtype=np.uint8)
-            return False, 0.0, empty_mask, 0.0, 0, False
+            return False, 0.0, empty_mask, 0.0, 0, False, self._empty_floor_diff_stats()
 
         diff = features - self._floor_model
+        floor_diff_stats = self._floor_diff_stats(diff, danger_x0, danger_x1)
         diff_mag = np.sqrt(np.sum(diff * diff, axis=2))
         mask = np.zeros(diff_mag.shape, dtype=np.uint8)
         mask[diff_mag >= self._floor_model_diff_threshold] = 255
@@ -358,33 +475,106 @@ class CameraLowObstacleDetector(Node):
             area_ratio >= self._floor_model_area_ratio_threshold
             and contour_count >= self._floor_model_min_contours
         )
+        self._last_obstacle_angle_min = None
+        self._last_obstacle_angle_max = None
+
+        if detected and np.count_nonzero(danger_mask) > 0:
+            cols = np.where(danger_mask > 0)[1]
+            if cols.size > 0:
+                width = max(1, danger_mask.shape[1] - 1)
+                left_ratio = float(np.min(cols)) / float(width)
+                right_ratio = float(np.max(cols)) / float(width)
+                angle_span = self._obstacle_scan_mark_angle_max - self._obstacle_scan_mark_angle_min
+                self._last_obstacle_angle_min = (
+                    self._obstacle_scan_mark_angle_min
+                    + left_ratio * angle_span
+                    - self._obstacle_scan_padding_angle
+                )
+                self._last_obstacle_angle_max = (
+                    self._obstacle_scan_mark_angle_min
+                    + right_ratio * angle_span
+                    + self._obstacle_scan_padding_angle
+                )
 
         if self._floor_model_learning and not detected and not edge_detected:
             cv2.accumulateWeighted(features, self._floor_model, self._floor_model_update_alpha)
 
-        return detected, confidence, mask, area_ratio, contour_count, True
+        return detected, confidence, mask, area_ratio, contour_count, True, floor_diff_stats
+
+    @staticmethod
+    def _empty_floor_diff_stats():
+        return {
+            'l_mean': 0.0,
+            'l_max': 0.0,
+            'ab_mean': 0.0,
+            'ab_max': 0.0,
+            'gradient_mean': 0.0,
+            'gradient_max': 0.0,
+        }
+
+    def _floor_diff_stats(self, diff, danger_x0, danger_x1):
+        danger_diff = diff[:, danger_x0:danger_x1, :]
+        if danger_diff.size == 0:
+            return self._empty_floor_diff_stats()
+
+        l_diff = np.abs(danger_diff[:, :, 0])
+        ab_diff = cv2.magnitude(danger_diff[:, :, 1], danger_diff[:, :, 2])
+        gradient_diff = np.abs(danger_diff[:, :, 3])
+        return {
+            'l_mean': float(np.mean(l_diff)),
+            'l_max': float(np.max(l_diff)),
+            'ab_mean': float(np.mean(ab_diff)),
+            'ab_max': float(np.max(ab_diff)),
+            'gradient_mean': float(np.mean(gradient_diff)),
+            'gradient_max': float(np.max(gradient_diff)),
+        }
+
+    def _publish_obstacle_scan_msg(self):
+        if not self._publish_obstacle_scan:
+            return
+
+        scan = LaserScan()
+        scan.header.stamp = self.get_clock().now().to_msg()
+        scan.header.frame_id = self._obstacle_scan_frame_id
+        scan.angle_min = self._obstacle_scan_angle_min
+        scan.angle_max = self._obstacle_scan_angle_max
+        scan.angle_increment = self._obstacle_scan_angle_increment
+        scan.time_increment = 0.0
+        scan.scan_time = self._processing_period
+        scan.range_min = self._obstacle_scan_range_min
+        scan.range_max = self._obstacle_scan_range_max
+
+        count = int(math.floor((scan.angle_max - scan.angle_min) / scan.angle_increment)) + 1
+        scan.ranges = [math.inf] * max(1, count)
+        scan.intensities = [0.0] * max(1, count)
+
+        if self._enabled and self._detected and self._last_obstacle_angle_min is not None:
+            angle_min = max(scan.angle_min, self._last_obstacle_angle_min)
+            angle_max = min(scan.angle_max, self._last_obstacle_angle_max)
+            start = max(0, int(math.floor((angle_min - scan.angle_min) / scan.angle_increment)))
+            end = min(count - 1, int(math.ceil((angle_max - scan.angle_min) / scan.angle_increment)))
+            for index in range(start, end + 1):
+                scan.ranges[index] = self._obstacle_scan_distance
+                scan.intensities[index] = 1.0
+
+        self._obstacle_scan_pub.publish(scan)
 
     def _draw_debug(
         self,
         frame,
-        edges,
         x0,
         y0,
         x1,
         y1,
         danger_x0,
         danger_x1,
-        contours,
         detected,
         confidence,
-        edge_density,
-        center_edge_density,
-        texture_variance,
-        contour_count,
         floor_mask,
         floor_area_ratio,
         floor_contour_count,
         floor_model_ready,
+        floor_diff_stats,
     ):
         debug = frame.copy()
         overlay = debug.copy()
@@ -397,12 +587,6 @@ class CameraLowObstacleDetector(Node):
         dx1 = x0 + danger_x1
         cv2.rectangle(debug, (dx0, y0), (dx1, y1), color, 3)
 
-        for contour in contours:
-            shifted = contour.copy()
-            shifted[:, 0, 0] += dx0
-            shifted[:, 0, 1] += y0
-            cv2.drawContours(debug, [shifted], -1, (255, 0, 255), 2)
-
         if floor_mask is not None and floor_mask.any():
             danger_floor = floor_mask[:, danger_x0:danger_x1]
             colored_mask = np.zeros((danger_floor.shape[0], danger_floor.shape[1], 3), dtype=np.uint8)
@@ -410,31 +594,21 @@ class CameraLowObstacleDetector(Node):
             target = debug[y0:y1, dx0:dx1]
             cv2.addWeighted(colored_mask, 0.40, target, 1.0, 0, target)
 
-        edge_bgr = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-        edge_bgr[np.where(edges > 0)] = (255, 255, 255)
-        eh, ew = edge_bgr.shape[:2]
-        preview_w = min(debug.shape[1] // 3, ew)
-        preview_h = max(1, int(eh * preview_w / max(1, ew)))
-        preview = cv2.resize(edge_bgr, (preview_w, preview_h), interpolation=cv2.INTER_AREA)
-        debug[8:8 + preview_h, 8:8 + preview_w] = preview
-        cv2.rectangle(debug, (8, 8), (8 + preview_w, 8 + preview_h), (255, 255, 255), 1)
-
         status = 'LOW OBSTACLE' if self._detected else ('detecting' if detected else 'clear')
         lines = [
             f'{status} conf={confidence:.2f}',
             f'floor={"ready" if floor_model_ready else str(self._floor_model_frames) + "/" + str(self._floor_model_warmup_frames)} '
-            f'diff={floor_area_ratio:.3f}/{self._floor_model_area_ratio_threshold:.3f} '
+            f'area={floor_area_ratio:.3f}/{self._floor_model_area_ratio_threshold:.3f} '
             f'fcontours={floor_contour_count}/{self._floor_model_min_contours}',
-            f'edge={edge_density:.3f}/{self._edge_density_threshold:.3f} '
-            f'center={center_edge_density:.3f}/{self._center_edge_density_threshold:.3f}',
-            f'texture={texture_variance:.0f}/{self._texture_variance_threshold:.0f} '
-            f'contours={contour_count}/{self._min_contour_count}',
+            f'L diff mean/max={floor_diff_stats["l_mean"]:.1f}/{floor_diff_stats["l_max"]:.1f}',
+            f'AB diff mean/max={floor_diff_stats["ab_mean"]:.1f}/{floor_diff_stats["ab_max"]:.1f}',
+            f'gradient diff mean/max={floor_diff_stats["gradient_mean"]:.1f}/{floor_diff_stats["gradient_max"]:.1f}',
         ]
         text_y = 28
         for line in lines:
-            cv2.putText(debug, line, (max(12, preview_w + 18), text_y), cv2.FONT_HERSHEY_SIMPLEX,
+            cv2.putText(debug, line, (12, text_y), cv2.FONT_HERSHEY_SIMPLEX,
                         0.55, (0, 0, 0), 3, cv2.LINE_AA)
-            cv2.putText(debug, line, (max(12, preview_w + 18), text_y), cv2.FONT_HERSHEY_SIMPLEX,
+            cv2.putText(debug, line, (12, text_y), cv2.FONT_HERSHEY_SIMPLEX,
                         0.55, color, 1, cv2.LINE_AA)
             text_y += 24
         return debug

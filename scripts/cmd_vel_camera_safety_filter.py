@@ -21,11 +21,13 @@ class CmdVelCameraSafetyFilter(Node):
         self.declare_parameter('detection_topic', '/low_obstacle/detected')
         self.declare_parameter('stamped', True)
         self.declare_parameter('detection_timeout', 0.6)
+        self.declare_parameter('hard_stop_when_detected', True)
         self.declare_parameter('stop_forward_motion', True)
         self.declare_parameter('slow_forward_scale', 0.25)
         self.declare_parameter('allow_backward_motion', True)
         self.declare_parameter('max_forward_when_detected', 0.0)
         self.declare_parameter('angular_scale_when_detected', 0.7)
+        self.declare_parameter('stop_publish_rate_hz', 10.0)
         self.declare_parameter('log_throttle_sec', 2.0)
 
         self._read_parameters()
@@ -38,7 +40,9 @@ class CmdVelCameraSafetyFilter(Node):
 
         self._last_detection_monotonic = 0.0
         self._detected = False
+        self._was_active = False
         self._last_log_monotonic = 0.0
+        self.create_timer(1.0 / self._stop_publish_rate_hz, self._publish_stop_if_active)
 
         self.get_logger().info(
             f'CmdVelCameraSafetyFilter started: {self._input_topic} -> {self._output_topic}, '
@@ -52,6 +56,7 @@ class CmdVelCameraSafetyFilter(Node):
         self._detection_topic = str(self.get_parameter('detection_topic').value)
         self._stamped = bool(self.get_parameter('stamped').value)
         self._detection_timeout = max(0.05, float(self.get_parameter('detection_timeout').value))
+        self._hard_stop_when_detected = bool(self.get_parameter('hard_stop_when_detected').value)
         self._stop_forward_motion = bool(self.get_parameter('stop_forward_motion').value)
         self._slow_forward_scale = min(1.0, max(0.0, float(self.get_parameter('slow_forward_scale').value)))
         self._allow_backward_motion = bool(self.get_parameter('allow_backward_motion').value)
@@ -60,6 +65,7 @@ class CmdVelCameraSafetyFilter(Node):
             1.0,
             max(0.0, float(self.get_parameter('angular_scale_when_detected').value)),
         )
+        self._stop_publish_rate_hz = max(1.0, float(self.get_parameter('stop_publish_rate_hz').value))
         self._log_throttle_sec = max(0.1, float(self.get_parameter('log_throttle_sec').value))
 
     def _on_set_parameters(self, _params):
@@ -70,6 +76,12 @@ class CmdVelCameraSafetyFilter(Node):
         self._detected = bool(msg.data)
         if self._detected:
             self._last_detection_monotonic = time.monotonic()
+            if not self._was_active:
+                self._was_active = True
+                self.get_logger().warn('Camera low-obstacle active; publishing stop commands')
+        elif self._was_active and not self._obstacle_active():
+            self._was_active = False
+            self.get_logger().info('Camera low-obstacle clear; releasing Nav2 velocity')
 
     def _cmd_callback(self, msg):
         if not self._enabled or not self._obstacle_active():
@@ -77,6 +89,12 @@ class CmdVelCameraSafetyFilter(Node):
             return
 
         twist = msg.twist if self._stamped else msg
+        if self._hard_stop_when_detected:
+            self._zero_twist(twist)
+            self._publisher.publish(msg)
+            self._log_limited_command('Camera low-obstacle active; forcing zero Nav2 velocity')
+            return
+
         if twist.linear.x > 0.0:
             if self._stop_forward_motion:
                 twist.linear.x = min(twist.linear.x, self._max_forward_when_detected)
@@ -91,11 +109,37 @@ class CmdVelCameraSafetyFilter(Node):
 
         twist.angular.z *= self._angular_scale_when_detected
         self._publisher.publish(msg)
+        self._log_limited_command('Camera low-obstacle active; limiting Nav2 forward velocity')
 
+    def _zero_twist(self, twist):
+        twist.linear.x = 0.0
+        twist.linear.y = 0.0
+        twist.linear.z = 0.0
+        twist.angular.x = 0.0
+        twist.angular.y = 0.0
+        twist.angular.z = 0.0
+
+    def _log_limited_command(self, message: str):
         now = time.monotonic()
         if now - self._last_log_monotonic >= self._log_throttle_sec:
             self._last_log_monotonic = now
-            self.get_logger().warn('Camera low-obstacle active; limiting Nav2 forward velocity')
+            self.get_logger().warn(message)
+
+
+    def _publish_stop_if_active(self):
+        if not self._enabled or not self._obstacle_active():
+            if self._was_active and not self._detected:
+                self._was_active = False
+                self.get_logger().info('Camera low-obstacle clear; releasing Nav2 velocity')
+            return
+
+        if not self._hard_stop_when_detected:
+            return
+
+        msg = TwistStamped() if self._stamped else Twist()
+        if self._stamped:
+            msg.header.stamp = self.get_clock().now().to_msg()
+        self._publisher.publish(msg)
 
     def _obstacle_active(self) -> bool:
         if self._detected:
